@@ -6,12 +6,6 @@ import numpy as np
 from matplotlib.path import Path
 
 
-def rectangle(width: float, height: float) -> Path:
-    """Builds a rectangle path."""
-    vertices = np.array([[-width, -height], [-width, height], [width, height], [width, -height], [-width, -height]])
-    return Path(vertices)
-
-
 class MinMaxTree:
     HEIGHT: int = 4
     """The height of the tree."""
@@ -24,15 +18,6 @@ class MinMaxTree:
 
     FIGSIZE: Tuple[int, int] = (21, 9)
     """The dimension of the output images."""
-
-    DRAW_KWARGS = dict(arrows=False, edge_color='black', width=2, linewidths=2)
-    """A dictionary of nx.draw() arguments."""
-
-    NODE_STYLE: Dict[str, Any] = dict(
-        default=(rectangle(width=7, height=2), 20000),
-        leaf=('s', 2000)
-    )
-    """Defines the shape and size of the node based on its kind."""
 
     BORDER_COLOR: Dict[str, str] = dict(
         leaf='#000000',
@@ -50,34 +35,55 @@ class MinMaxTree:
     """Defines the color of the node based on its kind."""
 
     @staticmethod
+    def _draw_kwargs(leaves: bool) -> Dict[str, Any]:
+        """A dictionary of nx.draw() arguments, depending on whether the drawn nodes are leaves or not."""
+        kwargs = dict(
+            arrows=False,
+            edge_color='black',
+            width=3,
+            linewidths=3,
+            font_family='arial'
+        )
+        if leaves:
+            kwargs['node_shape'] = 's'
+            kwargs['node_size'] = 2800
+            kwargs['font_size'] = 21
+            kwargs['font_weight'] = 'bold'
+        else:
+            w, h = 8, 2
+            kwargs['node_shape'] = Path(np.array([[-w, -h], [-w, h], [w, h], [w, -h], [-w, -h]]))
+            kwargs['node_size'] = 30000
+            kwargs['font_size'] = 23
+            kwargs['font_weight'] = 'normal'
+        return kwargs
+
+    @staticmethod
     def _draw(tree: nx.DiGraph, folder: Optional[str], name: str):
         """Draws the tree and stores the results in the given folder (or plots it if None) with its name."""
         # create data structures for leaf nodes, non-leaf nodes, and edges to be plotted separately
-        leafs = {n: d for n, d in tree.nodes(data=True) if d['kind'] == 'leaf'}
-        nodes = {n: d for n, d in tree.nodes(data=True) if d['kind'] != 'leaf'}
-        edges = tree.edges()
+        leafs = {node: data for node, data in tree.nodes(data=True) if data['kind'] == 'leaf'}
+        nodes = {node: data for node, data in tree.nodes(data=True) if data['kind'] != 'leaf'}
+        edges = tree.edges(data=True)
         fig = plt.figure(figsize=MinMaxTree.FIGSIZE)
         # use the same plotting routine for leaf nodes, non leaf nodes, and edges
         # this is due to the fact that node_shape and node_size accept a single value only
         # but we need to distinguish between leaf nodes (squared) and non-leaf nodes (rectangular)
-        for nodelist, edgelist, kind in [(leafs, [], 'leaf'), (nodes, [], 'default'), ({}, edges, 'default')]:
-            shape, size = MinMaxTree.NODE_STYLE[kind]
+        for nodelist, edgelist, leaves in [(leafs, {}, True), (nodes, {}, False), ({}, edges, False)]:
             nx.draw(
                 tree,
                 nodelist=list(nodelist),
                 edgelist=list(edgelist),
                 pos=nx.get_node_attributes(tree, name='pos'),
-                labels=nx.get_node_attributes(tree, name='label'),
-                edgecolors=[d['edge'] for d in nodelist.values()],
-                node_color=[d['color'] for d in nodelist.values()],
-                node_shape=shape,
-                node_size=size,
-                **MinMaxTree.DRAW_KWARGS
+                labels={node: data['label'] for node, data in nodelist.items()},
+                edgecolors=[data['edge'] for data in nodelist.values()],
+                node_color=[data['color'] for data in nodelist.values()],
+                **MinMaxTree._draw_kwargs(leaves=leaves)
             )
         # if a folder is not passed, plot the output, otherwise store it in the folder
         if folder is None:
             fig.show()
         else:
+            fig.gca().set_xlim(0, 1)
             fig.savefig(f'{folder}/{name}.png')
 
     def __init__(self, values: np.ndarray):
@@ -152,81 +158,6 @@ class MinMaxTree:
         """Draws the alphabeta solution and stores the results in the given folder (or plots it if None)."""
         tree = self.tree.copy()
 
-        def expand(key: int, alpha: int, beta: int, cut: bool) -> float:
-            node = tree.nodes[key]
-            # when a node is cut, assign a blank label and expand its successors with cut = True
-            if cut:
-                node['label'] = ''
-                node['color'] = MinMaxTree.NODE_COLOR['cut']
-                if node['kind'] == 'leaf':
-                    return node['value']
-                else:
-                    children = node['left'], node['right']
-                    function = np.min if node['kind'] == 'min' else np.max
-                    return function([expand(key=child, alpha=alpha, beta=beta, cut=True) for child in children])
-            # otherwise, assign the default color and when a leaf is found, simply return its value
-            node['color'] = MinMaxTree.NODE_COLOR['cut'] if cut else MinMaxTree.NODE_COLOR['default']
-            if node['kind'] == 'leaf':
-                node['label'] = node['value']
-                return node['value']
-            # otherwise, first assign alpha and beta, then retrieve the children
-            node['alpha'] = alpha
-            node['beta'] = beta
-            node['label'] = None
-            children = [node['left'], node['right']]
-            # distinguish strategy based on whether this is a min or max node
-            if node['kind'] == 'min':
-                node['value'] = MinMaxTree.MAX
-                for child in children:
-                    # if the node is not cut, proceed with the alpha beta, otherwise simply expand
-                    if not cut:
-                        value = expand(key=child, alpha=alpha, beta=min(node['beta'], beta), cut=False)
-                        node['value'] = min(node['value'], value)
-                        beta = min(node['beta'], node['value'])
-                        if alpha >= beta:
-                            cut = True
-                            # this is needed to stick to http://homepage.ufp.pt/jtorres/ensino/ia/alfabeta.html
-                            # which does not update the latest beta value if alpha >= beta
-                            node['label'] = f"{node['alpha']}/{node['value']}/{node['beta']}"
-                        node['beta'] = beta
-                    else:
-                        expand(key=child, alpha=alpha, beta=beta, cut=True)
-                if node['label'] is None:
-                    node['label'] = f"{node['alpha']}/{node['value']}/{node['beta']}"
-                return node['beta']
-            else:
-                node['value'] = MinMaxTree.MIN
-                for child in children:
-                    # if the node is not cut, proceed with the alpha beta, otherwise simply expand
-                    if not cut:
-                        value = expand(key=child, alpha=max(node['alpha'], alpha), beta=beta, cut=cut)
-                        node['value'] = max(node['value'], value)
-                        alpha = max(node['alpha'], node['value'])
-                        if alpha >= beta:
-                            cut = True
-                            # this is needed to stick to http://homepage.ufp.pt/jtorres/ensino/ia/alfabeta.html
-                            # which does not update the latest beta value if alpha >= beta
-                            node['label'] = node['label'] = f"{node['alpha']}/{node['value']}/{node['beta']}"
-                        node['alpha'] = alpha
-                    else:
-                        expand(key=child, alpha=max(node['alpha'], alpha), beta=beta, cut=cut)
-                # if we are in the root node (max only), color its best children
-                if node['layer'] == 0:
-                    for child in children:
-                        child = tree.nodes[child]
-                        child['color'] = MinMaxTree.NODE_COLOR['best' if child['value'] == node['value'] else 'default']
-                if node['label'] is None:
-                    node['label'] = f"{node['alpha']}/{node['value']}/{node['beta']}"
-                return node['alpha']
-
-        expand(key=0, alpha=MinMaxTree.MIN, beta=MinMaxTree.MAX, cut=False)
-        MinMaxTree._draw(tree, folder=folder, name='alphabeta')
-
-    def alphabeta_alternative(self, folder: Optional[str] = None):
-        """Draws the alphabeta solution and stores the results in the given folder (or plots it if None).
-        (Alternative version where labels and colors are post-processed rather than computed recursively)"""
-        tree = self.tree.copy()
-
         def expand(key: int, alpha: int, beta: int) -> float:
             # retrieve the node and assign the default color plus a visited flag
             node = tree.nodes[key]
@@ -245,22 +176,34 @@ class MinMaxTree:
                 node['value'] = MinMaxTree.MAX
                 for child in children:
                     value = expand(key=child, alpha=alpha, beta=min(node['beta'], beta))
+                    # use the min function to stick to http://homepage.ufp.pt/jtorres/ensino/ia/alfabeta.html
+                    # which assigns the value of the minmax tree instead of sticking to the alpha and beta
                     node['value'] = min(node['value'], value)
                     new_beta = min(node['beta'], node['value'])
                     if alpha >= new_beta:
                         return new_beta
+                    # change the value of beta later to stick to http://homepage.ufp.pt/jtorres/ensino/ia/alfabeta.html
+                    # which updates its value only if the search continues
                     node['beta'] = new_beta
-                return node['beta']
+                # return the value rather than beta to stick to http://homepage.ufp.pt/jtorres/ensino/ia/alfabeta.html
+                # which assigns the value of the minmax tree instead of sticking to the alpha and beta
+                return node['value']
             else:
                 node['value'] = MinMaxTree.MIN
                 for child in children:
                     value = expand(key=child, alpha=max(node['alpha'], alpha), beta=beta)
+                    # use the max function to stick to http://homepage.ufp.pt/jtorres/ensino/ia/alfabeta.html
+                    # which assigns the value of the minmax tree instead of sticking to the alpha and beta
                     node['value'] = max(node['value'], value)
                     new_alpha = max(node['alpha'], node['value'])
                     if new_alpha >= node['beta']:
                         return new_alpha
+                    # change the value of alpha later to stick to http://homepage.ufp.pt/jtorres/ensino/ia/alfabeta.html
+                    # which updates its value only if the search continues
                     node['alpha'] = new_alpha
-                return node['alpha']
+                # return the value rather than alpha to stick to http://homepage.ufp.pt/jtorres/ensino/ia/alfabeta.html
+                # which assigns the value of the minmax tree instead of sticking to the alpha and beta
+                return node['value']
 
         expand(key=0, alpha=MinMaxTree.MIN, beta=MinMaxTree.MAX)
         # post-process the tree to assign the correct label and color

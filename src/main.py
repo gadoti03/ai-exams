@@ -13,6 +13,7 @@ values = np.random.randint(low=-99, high=100, size=16)
 
 if __name__ == '__main__':
     if values is not None:
+        print('VALUES: [' + ', '.join([str(v) for v in values]) + ']\n')
         tree = MinMaxTree(values=values)
         # store the results
         tree.exercise(folder=folder)
