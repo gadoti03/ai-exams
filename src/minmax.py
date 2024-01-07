@@ -7,6 +7,8 @@ from matplotlib.path import Path
 
 
 class MinMaxTree:
+    """A MinMax Tree exercise instance."""
+
     HEIGHT: int = 4
     """The height of the tree."""
 
@@ -80,10 +82,10 @@ class MinMaxTree:
                 **MinMaxTree._draw_kwargs(leaves=leaves)
             )
         # if a folder is not passed, plot the output, otherwise store it in the folder
+        fig.gca().set_xlim(0, 1)
         if folder is None:
             fig.show()
         else:
-            fig.gca().set_xlim(0, 1)
             fig.savefig(f'{folder}/{name}.png')
 
     def __init__(self, values: np.ndarray):
