@@ -1,7 +1,7 @@
 from abc import abstractmethod
 from dataclasses import dataclass, field
 from string import ascii_lowercase
-from typing import Any, Callable, Literal, List, Optional, Tuple, Iterable
+from typing import Any, Callable, Literal, List, Optional, Tuple, Iterable, Dict
 
 import numpy as np
 
@@ -14,7 +14,7 @@ ORDINAL: List[str] = ['FIRST', 'SECOND', 'THIRD', 'FOURTH', 'FIFTH', 'SIXTH', 'S
 VOWELS: List[str] = ['a', 'e', 'i', 'o', 'u', 'A', 'E', 'I', 'O', 'U']
 """List of vowels to match the article before the variable name."""
 
-TAB: str = '  '
+TAB: int = 24
 """Tab spacing."""
 
 
@@ -54,8 +54,8 @@ class Variable:
     def __add__(self, other: int):
         return Operation(
             parent=self,
-            operation=lambda domain: domain + other,
-            reverse=lambda domain: domain - other,
+            operation=lambda: self.domain + other,
+            reverse=lambda codomain: codomain - other,
             name=f'{self.name} + {other}',
             csp=self.csp
         )
@@ -63,8 +63,8 @@ class Variable:
     def __radd__(self, other: int):
         return Operation(
             parent=self,
-            operation=lambda domain: domain + other,
-            reverse=lambda domain: domain - other,
+            operation=lambda: self.domain + other,
+            reverse=lambda codomain: codomain - other,
             name=f'{other} + {self.name}',
             csp=self.csp
         )
@@ -72,8 +72,8 @@ class Variable:
     def __sub__(self, other: int):
         return Operation(
             parent=self,
-            operation=lambda domain: domain - other,
-            reverse=lambda domain: domain + other,
+            operation=lambda: self.domain - other,
+            reverse=lambda codomain: codomain + other,
             name=f'{self.name} - {other}',
             csp=self.csp
         )
@@ -81,8 +81,8 @@ class Variable:
     def __rsub__(self, other: int):
         return Operation(
             parent=self,
-            operation=lambda domain: domain - other,
-            reverse=lambda domain: domain + other,
+            operation=lambda: other - self.domain,
+            reverse=lambda codomain: other - codomain,
             name=f'{other} - {self.name}',
             csp=self.csp
         )
@@ -90,8 +90,8 @@ class Variable:
     def __mul__(self, other: int):
         return Operation(
             parent=self,
-            operation=lambda domain: domain * other,
-            reverse=lambda domain: domain // other,
+            operation=lambda: self.domain * other,
+            reverse=lambda codomain: codomain // other,
             name=f'{self.name} * {other}',
             csp=self.csp
         )
@@ -99,9 +99,18 @@ class Variable:
     def __rmul__(self, other):
         return Operation(
             parent=self,
-            operation=lambda domain: domain * other,
-            reverse=lambda domain: domain // other,
+            operation=lambda: self.domain * other,
+            reverse=lambda codomain: codomain // other,
             name=f'{other} * {self.name}',
+            csp=self.csp
+        )
+
+    def __mod__(self, other: int):
+        return Operation(
+            parent=self,
+            operation=lambda: np.array(list({v % other for v in self.domain})),
+            reverse=lambda codomain: np.array([v for v in self.domain if v % other in codomain]),
+            name=f'{self.name} % {other}',
             csp=self.csp
         )
 
@@ -145,6 +154,12 @@ class Domain(Variable):
         self._domain.clear()
         self._domain.extend(list(domain))
 
+    @property
+    @abstractmethod
+    def original_domain(self) -> np.ndarray:
+        """The original domain of the variable."""
+        return np.array(self._original_domain)
+
     def string(self, original: bool = False) -> str:
         """Return a string representation of the variable's domain (or original domain, if original = True)."""
         domain = self._original_domain if original else self._domain
@@ -162,7 +177,7 @@ class Operation(Variable):
     parent: Variable = field()
     """The parent of the variable."""
 
-    operation: Callable[[np.ndarray], np.ndarray] = field()
+    operation: Callable[[], np.ndarray] = field()
     """The operation which is applied to the variable."""
 
     reverse: Callable[[np.ndarray], np.ndarray] = field()
@@ -171,7 +186,7 @@ class Operation(Variable):
     @property
     def domain(self) -> np.ndarray:
         # compute the domain from the parent's one
-        return self.operation(self.parent.domain)
+        return self.operation()
 
     @domain.setter
     def domain(self, domain: Iterable[int]):
@@ -257,8 +272,8 @@ class Constraint:
         return var
 
     def reduce(self) -> Tuple[bool, bool]:
-        """Reduces the domain of the involved variables (arc-consistency) and returns a tuple of booleans indicating
-        whether the domain of the first and second variable have been changed, respectively."""
+        """Reduces the domain of the involved variables and returns a tuple of booleans indicating whether the domain
+        of the first and second variable have been changed, respectively."""
         var1, var2 = self._var1, self._var2
         dom1, dom2 = var1.domain, var2.domain
         check1, check2 = self.OPERATORS[self.operator]
@@ -275,8 +290,8 @@ class CSP:
     """A CSP exercise instance."""
 
     def __init__(self):
-        self._output: Optional[str] = None
-        """The output of the CSP exercise."""
+        self._output: Optional[Dict[str, str]] = None
+        """The output of the CSP exercise (text and solution)."""
 
         self._variables: List[Domain] = []
         """The variables involved in the CSP."""
@@ -286,6 +301,7 @@ class CSP:
 
     def variable(self, *domain: int, name: str) -> Variable:
         """Adds a variable in the CSP."""
+        assert name not in [v.name for v in self._variables], f"There is already a variable named '{name}' in the csp"
         var = Domain(_domain=list(domain), name=name, csp=self)
         self._variables.append(var)
         return var
@@ -300,11 +316,11 @@ class CSP:
 
     def consistency(self, folder: Optional[str] = None):
         """Performs arc-consistency on the CSP and stores the results in the given folder (or prints if None)."""
-        assert self._output is None, "This csp has been already solved"
-        self._output = ''
-        finished = False
+        # initialize the exercise with the correct text
+        self._init('Apply the Arc-consistency to the CSP and show the final domains of the variables.')
+        # start the solution computation by iterating until the domains are not changed
         iteration = 0
-        # iterate until the domains are not changed
+        finished = False
         while not finished:
             finished = True
             # log the initial iteration message
@@ -319,7 +335,7 @@ class CSP:
                 # for both the variables involved (and their result), log the results
                 for var1, var2, res in [(cst.var1, cst.var2, res1), (cst.var2, cst.var1, res2)]:
                     article = 'an' if var2.name[0] in VOWELS else 'a'
-                    self._log(f'{TAB}- For each {var1}, is there {article} {var2}?', end=' ')
+                    self._log(f'  - For each {var1}, is there {article} {var2}?', end=' ')
                     # if the variable domain is null, the problem is infeasible (break the inner loop)
                     if len(var1.domain) == 0:
                         self._log(f'There is no assignment for {var1} which could satisfy the constraint.')
@@ -361,19 +377,148 @@ class CSP:
             introduction += f'{ascii_lowercase[i]}) {cst}\n'
         self._log(introduction, end='', pre=True)
         # store the results
-        self._save(folder=folder, name='consistency')
+        self._save(folder=folder, name='arc')
 
-    def _log(self, message: str, end: str = '\n', pre: bool = False):
-        """Logs a message in the output string (prepends if pre = True)."""
+    def forward(self, folder: Optional[str] = None):
+        """Performs forward check on the CSP and stores the results in the given folder (or prints if None)."""
+        # initialize the exercise with the correct text
+        exercise = 'Find the first solution through tree search, by applying forward checking, '
+        exercise += 'using alphabetical order of variables and lexicographic order of values.'
+        self._init(exercise)
+
+        # recursively try to find solution by checking variables' domains iteratively
+        def solve(idx: int, domains: List[np.ndarray]) -> bool:
+            # if we arrive to the point where there are no more variables left, then the problem is solver
+            if idx == len(self._variables):
+                return True
+            # otherwise, retrive the variable and iterate over its current domain
+            variable = self._variables[idx]
+            for value in domains[idx]:
+                # assign the current value as new domain and iterate through the constraints
+                fail = False
+                variable.domain = [value]
+                for cst in self._constraints:
+                    # when the variable appears in the constraint, perform the reduction and check for feasibility
+                    if cst.var1.name == variable.name or cst.var2.name == variable.name:
+                        cst.reduce()
+                        if len(cst.var1.domain) == 0 or len(cst.var2.domain) == 0:
+                            fail = True
+                            break
+                # log the results based on whether the process failed or not
+                self._log('Backtracking ' if fail else 'Labeling & FC', end=' ' * (TAB - 13))
+                post_fail = False
+                # for each variable, log:
+                #   - var = domains[i][0] (a unique value since already assigned) for previous variables
+                #   - var = value if the variable is the one being assigned
+                #   - var --> FAIL if the variable failed
+                #   - var::domain if the variable did not fail
+                #   - '-----' if the variable comes after one who failed
+                for i, var in enumerate(self._variables):
+                    if i < idx:
+                        msg = f'{var} = {domains[i][0]}'
+                    elif i == idx:
+                        msg = f'{var} = {value}'
+                    elif post_fail:
+                        msg = f'-----'
+                    elif len(var.domain) == 0:
+                        msg = f'{var} -> FAIL'
+                        post_fail = True
+                    else:
+                        msg = f'{var}::{var.string()}'
+                    self._log(msg, end=' ' * (TAB - len(msg)))
+                self._log()
+                # in case of the procedure did not fail and the problem can be solved, return true
+                if not fail and solve(idx=idx + 1, domains=[var.domain.copy() for var in self._variables]):
+                    return True
+                # otherwise, restore the initial domains
+                for i, var in enumerate(self._variables):
+                    var.domain = domains[i]
+            return False
+
+        # log the initial information
+        for v in self._variables:
+            self._log(f'{v}::{v.string(original=True)}')
+        self._log()
+        for c in self._constraints:
+            self._log(str(c))
+        self._log()
+        # start to solve from the first variable and log only if infeasible
+        if not solve(idx=0, domains=[v.domain.copy() for v in self._variables]):
+            self._log('\nThe problem is infeasible.')
+        # store the results
+        self._save(folder=folder, name='fc')
+
+    def lookahead(self, assign: int, folder: Optional[str] = None):
+        """Performs full look-ahead on the CSP and stores the results in the given folder (or prints if None).
+        The assign value is assigned to the first variable in the CSP."""
+        # assigns the value to the new domain
+        var = self._variables[0]
+        assert assign in var.domain, f"Domain of variable {var} is {var.domain}, trying to assign value {assign}"
+        self._variables[0].domain = [assign]
+        # initialize the exercise with the correct text
+        exercise = f'Apply the Full Look Ahead (FLA) to the CSP, and show the domains of the variables when {var} is '
+        exercise += f'instantiated to {assign} (consider the variables according to the numerical order).'
+        self._init(exercise=exercise)
+        # order the constraints depending on whether the assigned variable appears or not
+        constraints = {'var': [], 'other': []}
+        for cst in self._constraints.copy():
+            key = 'var' if (cst.var1.name == var.name or cst.var2.name == var.name) else 'other'
+            constraints[key].append(cst)
+        # iterate over the constraints while keeping track of feasibility
+        feasible = True
+        for cst in [cst for key, cst_list in constraints.items() for cst in cst_list]:
+            # apply the constraints
+            cst.reduce()
+            self._log(f'Apply {cst}:')
+            if len(cst.var1.domain) == 0 or len(cst.var2.domain) == 0:
+                self._log(f'There is no assignment which could satisfy the constraint.')
+                self._log('The problem is infeasible.')
+                feasible = False
+                break
+            else:
+                self._log(f'{cst.var1}::{cst.var1.string()}')
+                self._log(f'{cst.var2}::{cst.var2.string()}')
+            self._log()
+        # if the problem is feasible, log the final domains
+        if feasible:
+            self._log('\nFinal Domains:')
+            self._log(f'{var} = {assign}')
+            for var in self._variables[1:]:
+                self._log(f'{var}::{var.string()}')
+        # store the results
+        self._save(folder=folder, name='fla')
+
+    def _init(self, exercise: str):
+        """Initializes the solution process."""
+        # check that the problem was not already solved
+        assert self._output is None, "This csp has been already solved"
+        # build the exercise text
+        text = 'Given the following CSP:\n\n'
+        for var in self._variables:
+            text += f'{var}::{var.string(original=True)}\n'
+        text += '\n'
+        for cst in self._constraints:
+            text += f'{cst}\n'
+        text += f'\n{exercise}'
+        # initialize the output
+        self._output = dict(text=text, solution='')
+
+    def _log(self, message: str = '', end: str = '\n', pre: bool = False, solution: bool = True):
+        """Logs a message in the output string (prepends if pre = True), either the text or the solution."""
+        key = 'solution' if solution else 'text'
         if pre:
-            self._output = message + end + self._output
+            self._output[key] = message + end + self._output[key]
         else:
-            self._output = self._output + message + end
+            self._output[key] = self._output[key] + message + end
 
     def _save(self, folder: Optional[str], name: str):
         """Stores the output in the given folder (or prints it if None)."""
         if folder is None:
-            print(self._output)
+            for key, output in self._output.items():
+                print(f'{key.upper()}:')
+                print(output)
+                print()
         else:
-            with open(file=f'{folder}/{name}.txt', mode='w') as f:
-                f.write(self._output)
+            for key, output in self._output.items():
+                with open(file=f'{folder}/{name}_{key}.txt', mode='w') as f:
+                    f.write(output)

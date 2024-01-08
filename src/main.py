@@ -1,3 +1,5 @@
+import numpy as np
+
 from src.csp import CSP
 from src.minmax import MinMaxTree
 
@@ -5,29 +7,38 @@ from src.minmax import MinMaxTree
 folder = '../temp'
 
 # minmax
-values = None  # np.random.randint(low=-99, high=100, size=16)
+values = np.random.randint(low=-99, high=100, size=16)
+show = False
 
 # csp
-consistency = True
 problem = CSP()
-a = problem.variable(0, 1, 2, 3, 4, 5, 6, 7, name='A')
-b = problem.variable(0, 1, 2, 3, 4, 5, 6, 7, name='B')
-c = problem.variable(0, 1, 2, 3, 4, 5, 6, 7, name='C')
-problem.constraint(a + 1 <= b)
-problem.constraint(a + 4 >= c)
-problem.constraint(b + 3 <= c)
+domain = range(1, 5)
+a = problem.variable(*domain, name='A')
+b = problem.variable(*domain, name='B')
+c = problem.variable(*domain, name='C')
+d = problem.variable(*domain, name='D')
+problem.constraint(a > b)
+problem.constraint(c <= b + 1)
+problem.constraint(c > d)
+problem.constraint(a == d + 2)
+assign = None
+kind = 'fc'
 
 if __name__ == '__main__':
-    if values is not None:
-        print('VALUES: [' + ', '.join([str(v) for v in values]) + ']\n')
-        tree = MinMaxTree(values=values)
-        # store the results
-        tree.exercise(folder=folder)
-        tree.minmax(folder=folder)
-        tree.alphabeta(folder=folder)
-        # manually check the cuts
-        tree.alphabeta()
-    if consistency is True:
+    # solve minmax and print/plot results if needed
+    # tree = MinMaxTree(values=values)
+    # tree.exercise(folder=folder)
+    # tree.minmax(folder=folder)
+    # tree.alphabeta(folder=folder)
+    # if show:
+    #     print('VALUES: [' + ', '.join([str(v) for v in values]) + ']\n')
+    #     tree.alphabeta()
+    # handle the csp type
+    if kind == 'arc':
         problem.consistency(folder=folder)
-    elif consistency is False:
-        raise NotImplementedError()
+    elif kind == 'fc':
+        problem.forward(folder=folder)
+    elif kind == 'fla':
+        problem.lookahead(assign=assign, folder=folder)
+    else:
+        raise AssertionError(f"Unknown csp kind '{kind}'")
