@@ -14,8 +14,11 @@ ORDINAL: List[str] = ['FIRST', 'SECOND', 'THIRD', 'FOURTH', 'FIFTH', 'SIXTH', 'S
 VOWELS: List[str] = ['a', 'e', 'i', 'o', 'u', 'A', 'E', 'I', 'O', 'U']
 """List of vowels to match the article before the variable name."""
 
-TAB: int = 24
+TAB: int = 12
 """Tab spacing."""
+
+LONG_TAB: int = 16
+"""Long tab spacing."""
 
 
 @dataclass(frozen=False, eq=False, repr=False)
@@ -405,27 +408,27 @@ class CSP:
                             fail = True
                             break
                 # log the results based on whether the process failed or not
-                self._log('Backtracking ' if fail else 'Labeling & FC', end=' ' * (TAB - 13))
+                self._log('Backtracking ' if fail else 'Labeling & FC', end=' ' * (LONG_TAB - 13) + ' | ')
                 post_fail = False
                 # for each variable, log:
                 #   - var = domains[i][0] (a unique value since already assigned) for previous variables
                 #   - var = value if the variable is the one being assigned
-                #   - var --> FAIL if the variable failed
-                #   - var::domain if the variable did not fail
-                #   - '-----' if the variable comes after one who failed
+                #   - FAIL if the variable failed
+                #   - domain if the variable did not fail
+                #   - '///' if the variable comes after one who failed
                 for i, var in enumerate(self._variables):
                     if i < idx:
                         msg = f'{var} = {domains[i][0]}'
                     elif i == idx:
                         msg = f'{var} = {value}'
                     elif post_fail:
-                        msg = f'-----'
+                        msg = f'///'
                     elif len(var.domain) == 0:
-                        msg = f'{var} -> FAIL'
+                        msg = f'FAIL'
                         post_fail = True
                     else:
-                        msg = f'{var}::{var.string()}'
-                    self._log(msg, end=' ' * (TAB - len(msg)))
+                        msg = var.string()
+                    self._log(msg, end=' ' * (TAB - len(msg)) + ' | ')
                 self._log()
                 # in case of the procedure did not fail and the problem can be solved, return true
                 if not fail and solve(idx=idx + 1, domains=[var.domain.copy() for var in self._variables]):
@@ -441,7 +444,10 @@ class CSP:
         self._log()
         for c in self._constraints:
             self._log(str(c))
-        self._log()
+        self._log('\n', end=' ' * LONG_TAB + ' | ')
+        for v in self._variables:
+            self._log(v.name, end=' ' * (TAB - len(v.name)) + ' | ')
+        self._log('\n' + '-' * (LONG_TAB + 3 + (TAB + 3) * len(self._variables)))
         # start to solve from the first variable and log only if infeasible
         if not solve(idx=0, domains=[v.domain.copy() for v in self._variables]):
             self._log('\nThe problem is infeasible.')
