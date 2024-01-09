@@ -91,12 +91,12 @@ class MinMaxTree:
     def __init__(self, values: np.ndarray):
         """Creates the minmax tree using a nx.DiGraph structure where the leaf nodes have the given values."""
         assert len(values) == 2 ** MinMaxTree.HEIGHT, f"Expected {2 ** MinMaxTree.HEIGHT} values, got {len(values)}"
-        self.tree = nx.balanced_tree(r=2, h=MinMaxTree.HEIGHT, create_using=nx.DiGraph)
+        self._tree: nx.DiGraph = nx.balanced_tree(r=2, h=MinMaxTree.HEIGHT, create_using=nx.DiGraph)
         for height in range(MinMaxTree.HEIGHT + 1):
             for element in range(2 ** height):
                 previous = 2 ** height
                 key = previous + element - 1
-                node = self.tree.nodes[key]
+                node = self._tree.nodes[key]
                 node['key'] = key
                 node['layer'] = height
                 node['element'] = element
@@ -115,9 +115,13 @@ class MinMaxTree:
                     if height != 0:
                         node['parent'] = key // 2
 
+    @property
+    def values(self) -> np.ndarray:
+        return np.array([v for v in nx.get_node_attributes(self._tree, name='value').values() if v is not None])
+
     def exercise(self, folder: Optional[str] = None):
         """Draws the exercise image and stores the results in the given folder (or plots it if None)."""
-        tree = self.tree.copy()
+        tree = self._tree.copy()
         # for each node, set the appropriate color and assign a blank label for non-leaf ones
         for node, data in tree.nodes(data=True):
             node = tree.nodes[node]
@@ -131,7 +135,7 @@ class MinMaxTree:
 
     def minmax(self, folder: Optional[str] = None):
         """Draws the minmax solution and stores the results in the given folder (or plots it if None)."""
-        tree = self.tree.copy()
+        tree = self._tree.copy()
 
         def expand(key: int) -> float:
             # retrieve the node and assign the default color
@@ -158,7 +162,7 @@ class MinMaxTree:
 
     def alphabeta(self, folder: Optional[str] = None):
         """Draws the alphabeta solution and stores the results in the given folder (or plots it if None)."""
-        tree = self.tree.copy()
+        tree = self._tree.copy()
 
         def expand(key: int, alpha: int, beta: int) -> float:
             # retrieve the node and assign the default color plus a visited flag

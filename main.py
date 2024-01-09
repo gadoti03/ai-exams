@@ -2,13 +2,14 @@ import numpy as np
 
 from src.csp import CSP
 from src.minmax import MinMaxTree
+from src.questions import Questions
 
 # results
 folder = '../temp'
 
 # minmax
-values = np.random.randint(low=-99, high=100, size=16)
-show = False
+tree = MinMaxTree(values=np.random.randint(low=-99, high=100, size=16))
+show = True
 
 # csp
 problem = CSP()
@@ -24,15 +25,18 @@ problem.constraint(a == d + 2)
 assign = None
 kind = 'fc'
 
+# questions
+faikr = 'move'
+intsys = True
+
 if __name__ == '__main__':
     # solve minmax and print/plot results if needed
-    # tree = MinMaxTree(values=values)
-    # tree.exercise(folder=folder)
-    # tree.minmax(folder=folder)
-    # tree.alphabeta(folder=folder)
-    # if show:
-    #     print('VALUES: [' + ', '.join([str(v) for v in values]) + ']\n')
-    #     tree.alphabeta()
+    tree.exercise(folder=folder)
+    tree.minmax(folder=folder)
+    tree.alphabeta(folder=folder)
+    if show:
+        print('VALUES: [' + ', '.join([str(v) for v in tree.values]) + ']\n')
+        tree.alphabeta()
     # handle the csp type
     if kind == 'arc':
         problem.consistency(folder=folder)
@@ -42,3 +46,8 @@ if __name__ == '__main__':
         problem.lookahead(assign=assign, folder=folder)
     else:
         raise AssertionError(f"Unknown csp kind '{kind}'")
+    # handle questions
+    if faikr is not None:
+        Questions.faikr(action=faikr, folder=folder)
+    if intsys:
+        Questions.intsys(folder=folder)
