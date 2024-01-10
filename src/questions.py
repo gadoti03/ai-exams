@@ -46,7 +46,7 @@ class Questions:
         Additionally, the name of the action to be modelled with Kowalsky formulation must be passed."""
         questions = [
             f'Model the action {action} (preconditions, effects and frame axioms),'
-            ' and the initial state of the exercise 4 using the Kowalsky formulation',
+            ' and the initial state of the exercise 4 using the Kowalsky formulation,',
             'Build two levels of graph plan for the exercise 4.'
         ]
         questions += list(np.random.choice(Questions.FAIKR, size=Questions.NUM, replace=False))
@@ -70,4 +70,4 @@ class Questions:
         else:
             with open(file=f'{folder}/{name}.txt', mode='w') as f:
                 for i, question in enumerate(questions):
-                    f.write(f'{i + 1})  {question}')
+                    f.write(f'{i + 1})  {question}\n')
