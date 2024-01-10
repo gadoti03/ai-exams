@@ -380,7 +380,7 @@ class CSP:
             introduction += f'{ascii_lowercase[i]}) {cst}\n'
         self._log(introduction, end='', pre=True)
         # store the results
-        self._save(folder=folder, name='arc')
+        self._save(folder=folder, name='consistency')
 
     def forward(self, folder: Optional[str] = None):
         """Performs forward check on the CSP and stores the results in the given folder (or prints if None)."""
@@ -452,7 +452,7 @@ class CSP:
         if not solve(idx=0, domains=[v.domain.copy() for v in self._variables]):
             self._log('\nThe problem is infeasible.')
         # store the results
-        self._save(folder=folder, name='fc')
+        self._save(folder=folder, name='forward')
 
     def lookahead(self, assign: int, folder: Optional[str] = None):
         """Performs full look-ahead on the CSP and stores the results in the given folder (or prints if None).
@@ -492,7 +492,7 @@ class CSP:
             for var in self._variables[1:]:
                 self._log(f'{var}::{var.string()}')
         # store the results
-        self._save(folder=folder, name='fla')
+        self._save(folder=folder, name='lookahead')
 
     def _init(self, exercise: str):
         """Initializes the solution process."""

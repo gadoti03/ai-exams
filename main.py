@@ -1,15 +1,23 @@
 import numpy as np
 
 from src.csp import CSP
-from src.minmax import MinMaxTree
+from src.game import Game
 from src.questions import Questions
+from src.training import Training
 
 # results
-folder = '../temp'
+folder = 'temp'
 
-# minmax
-tree = MinMaxTree(values=np.random.randint(low=-99, high=100, size=16))
+# game
+game = Game(values=np.random.randint(low=-99, high=100, size=16))
 show = True
+
+# training
+training = Training(
+    output='Test',
+    framework={'V1', 'V2'},
+    plane={'Airbus', 'Boeing', 'Comac'}
+)
 
 # csp
 problem = CSP()
@@ -23,7 +31,7 @@ problem.constraint(c <= b + 1)
 problem.constraint(c > d)
 problem.constraint(a == d + 2)
 assign = None
-kind = 'fc'
+kind = 'consistency'
 
 # questions
 faikr = 'move'
@@ -31,18 +39,20 @@ intsys = True
 
 if __name__ == '__main__':
     # solve minmax and print/plot results if needed
-    tree.exercise(folder=folder)
-    tree.minmax(folder=folder)
-    tree.alphabeta(folder=folder)
+    game.exercise(folder=folder)
+    game.minmax(folder=folder)
+    game.alphabeta(folder=folder)
     if show:
-        print('VALUES: [' + ', '.join([str(v) for v in tree.values]) + ']\n')
-        tree.alphabeta()
+        print('VALUES: [' + ', '.join([str(v) for v in game.values]) + ']\n')
+        game.alphabeta()
+    # solve the training set exercise
+    training.solve(folder=folder)
     # handle the csp type
-    if kind == 'arc':
+    if kind == 'consistency':
         problem.consistency(folder=folder)
-    elif kind == 'fc':
+    elif kind == 'forward':
         problem.forward(folder=folder)
-    elif kind == 'fla':
+    elif kind == 'lookahead':
         problem.lookahead(assign=assign, folder=folder)
     else:
         raise AssertionError(f"Unknown csp kind '{kind}'")
