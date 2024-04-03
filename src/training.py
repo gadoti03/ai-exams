@@ -3,6 +3,11 @@ from typing import List, Tuple, Optional, Dict, Any, Iterable
 
 import numpy as np
 import pandas as pd
+from docx import Document
+from docx.enum.text import WD_ALIGN_PARAGRAPH
+from docx.shared import Cm
+
+from src.exercise import Exercise
 
 
 @dataclass(frozen=True)
@@ -27,7 +32,7 @@ class Decision:
     leaves: Dict[str, Leaf] = field(init=False, default_factory=dict)
 
 
-class Training:
+class Training(Exercise):
     """A training set exercise instance."""
 
     SIZE: Tuple[int, int] = 12, 16
@@ -41,6 +46,49 @@ class Training:
 
     ALIASES: Dict[Any, str] = {np.nan: '?', True: 'yes', False: 'no'}
     """The label aliases for output outcomes and nan values."""
+
+    def text(self, doc: Document):
+        doc.add_paragraph('Given the following training set:')
+        doc.add_paragraph()
+        # build dataset and add table
+        c0, c1 = self._inputs.columns  # retrieve the two column to check that only two values were passed
+        data = pd.concat([self._inputs, self._output], axis=1).map(lambda x: Training.ALIASES.get(x, x))
+        table = doc.add_table(1, 3)
+        cells = table.rows[0].cells
+        for i, c in enumerate(data.columns):
+            cells[i].text = c
+            cells[i].paragraphs[0].runs[0].font.bold = True
+        for _, row in data.iterrows():
+            cells = table.add_row().cells
+            for i, v in enumerate(row):
+                cells[i].text = v
+        for row in table.rows:
+            row.height = Cm(0.65)
+        table.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        table.style = 'Table Grid'
+        # add text
+        doc.add_paragraph()
+        p = doc.add_paragraph(' a)  Compute the entropy of the training set w.r.t. the attribute ')
+        p.add_run(self._output.name).bold = True
+        doc.add_paragraph(' b)  Compute the gain of the two attributes with respect to these training examples')
+        doc.add_paragraph(' c)  Build the decision tree with one level for the training set'
+                          ' and compute the labels of each leaf.')
+        p = doc.add_paragraph(' d)  Classify the instance: [')
+        p.add_run(f'{c0} = {self._value}').bold = True
+        p.add_run(' | ')
+        p.add_run(f'{c1} = ?').bold = True
+        p.add_run(']')
+
+    def solution(self, doc: Document):
+        # build the solution by executing the four sub-exercises (entropy, gain, tree, instance)
+        doc.add_paragraph(f' a)  {self._entropy(series=self._output)[1]}').alignment = WD_ALIGN_PARAGRAPH.LEFT
+        doc.add_paragraph()
+        p = doc.add_paragraph(f' b)\n' + '\n'.join(self._gain(feature=column)[1] for column in self._inputs.columns))
+        p.alignment = WD_ALIGN_PARAGRAPH.LEFT
+        doc.add_paragraph(f' c)  {self._root()[1]}').alignment = WD_ALIGN_PARAGRAPH.LEFT
+        doc.add_paragraph()
+        doc.add_paragraph(f' d)  {self._instance()[1]}').alignment = WD_ALIGN_PARAGRAPH.LEFT
+        doc.add_paragraph()
 
     @staticmethod
     def _sample(values: Iterable[str], size: int, nan: int) -> List[str]:
@@ -89,7 +137,7 @@ class Training:
         # build the output as a series of [True, False] values, with the same size as the inputs, and the given name
         self._output: pd.Series = pd.Series(np.random.choice([True, False], size=len(self._inputs)), name=output)
         # randomly choose one value from the first input column which will be part of the final instance
-        self._value: str = np.random.choice(self._inputs.iloc[:, 0].unique())
+        self._value: str = np.random.choice(self._inputs.iloc[:, 0].dropna().unique())
 
     def _gain(self, feature: str) -> Tuple[float, str]:
         """Computes the gain of the given input feature and returns it along with a string solution."""
@@ -126,7 +174,7 @@ class Training:
     def _root(self) -> Tuple[Decision, str]:
         """Computes the root of the decision tree with one level and returns it along with a string solution."""
         # compute the gain for all the input features and select the optimal one
-        root = pd.Series({column: self._gain(feature=column) for column in self._inputs.columns}).idxmax()
+        root = pd.Series({column: self._gain(feature=column)[0] for column in self._inputs.columns}).idxmax()
         # retrieve the root series and build a Decision instance with the given root
         series = self._inputs[root]
         decision = Decision(root=root)
@@ -180,41 +228,11 @@ class Training:
                 # retrieve the probability as weighted sum of each leaf outcome
                 for leaf in decision.leaves.values():
                     probability += leaf.outcome(value=outcome) / len(self._output)
-                    messages.append(f'{leaf.examples}/{num} * {leaf.outcome(value=outcome)}/{leaf.examples}')
+                    msg = f'{round(leaf.examples, Training.ROUND)}/{num} * '
+                    msg += f'{round(leaf.outcome(value=outcome), Training.ROUND)}/{leaf.examples}'
+                    messages.append(msg)
                 probability = round(100 * probability, Training.ROUND - 2)
                 message += f'  - P({label}) = ' + ' + '.join(messages) + f' = {probability}%\n'
                 probabilities[outcome] = probability
         # return the positive probability and the solution
         return probabilities[True], message
-
-    def solve(self, folder: Optional[str] = None):
-        # retrieve the two column to check that only two values were passed
-        c0, c1 = self._inputs.columns
-        # build the data text by splitting via '\t' symbol to allow for easier paste in word tables
-        data = pd.concat([self._inputs, self._output], axis=1).map(lambda v: Training.ALIASES.get(v, v))
-        text = '\t'.join(data.columns) + '\n'
-        for _, row in data.iterrows():
-            text += '\t'.join(row.values) + '\n'
-        text += '\n'
-        # build the text of the exercise
-        text += f'a) Compute the entropy of the training set w.r.t. the attribute {self._output.name}\n'
-        text += 'b) Compute the gain of the two attributes with respect to these training examples\n'
-        text += 'c) Build the decision tree with one level for the training set and compute the labels of each leaf.\n'
-        text += f'd) Classify the instance: [{c0} = {self._value} | {c1} = ?]\n'
-        # build the solution by executing the four sub-exercises (entropy, gain, tree, instance)
-        solution = f'a) {self._entropy(series=self._output)[1]}\n'
-        solution += 'b)\n' + '\n'.join(self._gain(feature=column)[1] for column in self._inputs.columns) + '\n'
-        solution += f'c) {self._root()[1]}\n'
-        solution += f'd) {self._instance()[1]}'
-        # store the results
-        if folder is None:
-            print('TEXT:')
-            print(text)
-            print()
-            print('SOLUTION:')
-            print(solution)
-        else:
-            with open(file=f'{folder}/training_text.txt', mode='w') as f:
-                f.write(text)
-            with open(file=f'{folder}/training_solution.txt', mode='w') as f:
-                f.write(solution)

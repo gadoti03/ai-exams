@@ -1,12 +1,19 @@
-from typing import Tuple, Optional, Dict, Any
+from io import BytesIO
+from typing import Tuple, Dict, Any
 
 import matplotlib.pyplot as plt
 import networkx as nx
 import numpy as np
+from docx import Document
+from docx.enum.text import WD_ALIGN_PARAGRAPH
+from docx.shared import Cm
+from matplotlib.figure import Figure
 from matplotlib.path import Path
 
+from src.exercise import Exercise
 
-class Game:
+
+class Game(Exercise):
     """A MinMax Game Tree exercise instance."""
 
     HEIGHT: int = 4
@@ -36,61 +43,32 @@ class Game:
     )
     """Defines the color of the node based on its kind."""
 
-    @staticmethod
-    def _draw_kwargs(leaves: bool) -> Dict[str, Any]:
-        """A dictionary of nx.draw() arguments, depending on whether the drawn nodes are leaves or not."""
-        kwargs = dict(
-            arrows=False,
-            edge_color='black',
-            width=3,
-            linewidths=3,
-            font_family='arial'
-        )
-        if leaves:
-            kwargs['node_shape'] = 's'
-            kwargs['node_size'] = 2800
-            kwargs['font_size'] = 21
-            kwargs['font_weight'] = 'bold'
-        else:
-            w, h = 8, 2
-            kwargs['node_shape'] = Path(np.array([[-w, -h], [-w, h], [w, h], [w, -h], [-w, -h]]))
-            kwargs['node_size'] = 30000
-            kwargs['font_size'] = 23
-            kwargs['font_weight'] = 'normal'
-        return kwargs
+    def text(self, doc: Document):
+        p = doc.add_paragraph('Consider the following game tree where the first player is ')
+        p.add_run('MAX').italic = True
+        p.add_run('. Show how the ')
+        p.add_run('min-max').italic = True
+        p.add_run(' algorithm works and show the ')
+        p.add_run('alfa-beta').italic = True
+        p.add_run(' cuts. Also, show which is the proposed move for the first player.')
+        img = BytesIO()
+        self.exercise.savefig(img)
+        doc.add_picture(img, width=Cm(18.5))
+        doc.paragraphs[-1].alignment = WD_ALIGN_PARAGRAPH.CENTER
+        img.close()
 
-    @staticmethod
-    def _draw(tree: nx.DiGraph, folder: Optional[str], name: str):
-        """Draws the tree and stores the results in the given folder (or plots it if None) with its name."""
-        # create data structures for leaf nodes, non-leaf nodes, and edges to be plotted separately
-        leafs = {node: data for node, data in tree.nodes(data=True) if data['kind'] == 'leaf'}
-        nodes = {node: data for node, data in tree.nodes(data=True) if data['kind'] != 'leaf'}
-        edges = tree.edges(data=True)
-        fig = plt.figure(figsize=Game.FIGSIZE)
-        # use the same plotting routine for leaf nodes, non leaf nodes, and edges
-        # this is due to the fact that node_shape and node_size accept a single value only
-        # but we need to distinguish between leaf nodes (squared) and non-leaf nodes (rectangular)
-        for nodelist, edgelist, leaves in [(leafs, {}, True), (nodes, {}, False), ({}, edges, False)]:
-            nx.draw(
-                tree,
-                nodelist=list(nodelist),
-                edgelist=list(edgelist),
-                pos=nx.get_node_attributes(tree, name='pos'),
-                labels={node: data['label'] for node, data in nodelist.items()},
-                edgecolors=[data['edge'] for data in nodelist.values()],
-                node_color=[data['color'] for data in nodelist.values()],
-                **Game._draw_kwargs(leaves=leaves)
-            )
-        # if a folder is not passed, plot the output, otherwise store it in the folder
-        fig.gca().set_xlim(0, 1)
-        if folder is None:
-            fig.show()
-        else:
-            fig.savefig(f'{folder}/game_{name}.png')
+    def solution(self, doc: Document):
+        for text, figure in [('a) Min-Max', self.minmax), ('b) Alpha-beta cuts', self.alphabeta)]:
+            doc.add_paragraph(text)
+            img = BytesIO()
+            figure.savefig(img)
+            doc.add_picture(img, width=Cm(18.5))
+            doc.paragraphs[-1].alignment = WD_ALIGN_PARAGRAPH.CENTER
+            img.close()
 
-    def __init__(self, values: np.ndarray):
+    def __init__(self):
         """Creates the minmax tree using a nx.DiGraph structure where the leaf nodes have the given values."""
-        assert len(values) == 2 ** Game.HEIGHT, f"Expected {2 ** Game.HEIGHT} values, got {len(values)}"
+        values = np.random.randint(low=-99, high=100, size=16)
         self._tree: nx.DiGraph = nx.balanced_tree(r=2, h=Game.HEIGHT, create_using=nx.DiGraph)
         for height in range(Game.HEIGHT + 1):
             for element in range(2 ** height):
@@ -119,8 +97,9 @@ class Game:
     def values(self) -> np.ndarray:
         return np.array([v for v in nx.get_node_attributes(self._tree, name='value').values() if v is not None])
 
-    def exercise(self, folder: Optional[str] = None):
-        """Draws the exercise image and stores the results in the given folder (or plots it if None)."""
+    @property
+    def exercise(self) -> Figure:
+        """Return the figure of the exercise."""
         tree = self._tree.copy()
         # for each node, set the appropriate color and assign a blank label for non-leaf ones
         for node, data in tree.nodes(data=True):
@@ -131,10 +110,11 @@ class Game:
             else:
                 node['color'] = Game.NODE_COLOR['exercise']
                 node['label'] = ''
-        Game._draw(tree, folder=folder, name='exercise')
+        return Game._draw(tree)
 
-    def minmax(self, folder: Optional[str] = None):
-        """Draws the minmax solution and stores the results in the given folder (or plots it if None)."""
+    @property
+    def minmax(self) -> Figure:
+        """Return the figure of the minmax solution."""
         tree = self._tree.copy()
 
         def expand(key: int) -> float:
@@ -158,10 +138,11 @@ class Game:
 
         # start the expansion from the root
         expand(key=0)
-        Game._draw(tree, folder=folder, name='minmax')
+        return Game._draw(tree)
 
-    def alphabeta(self, folder: Optional[str] = None):
-        """Draws the alphabeta solution and stores the results in the given folder (or plots it if None)."""
+    @property
+    def alphabeta(self) -> Figure:
+        """Return the figure of the alphabeta solution."""
         tree = self._tree.copy()
 
         def expand(key: int, alpha: int, beta: int) -> float:
@@ -226,4 +207,53 @@ class Game:
         root, left, right = tree.nodes[0], tree.nodes[1], tree.nodes[2]
         left['color'] = Game.NODE_COLOR['best' if left['value'] == root['value'] else 'default']
         right['color'] = Game.NODE_COLOR['best' if right['value'] == root['value'] else 'default']
-        Game._draw(tree, folder=folder, name='alphabeta')
+        return Game._draw(tree)
+
+    @staticmethod
+    def _draw_kwargs(leaves: bool) -> Dict[str, Any]:
+        """A dictionary of nx.draw() arguments, depending on whether the drawn nodes are leaves or not."""
+        kwargs = dict(
+            arrows=False,
+            edge_color='black',
+            width=3,
+            linewidths=3,
+            font_family='arial'
+        )
+        if leaves:
+            kwargs['node_shape'] = 's'
+            kwargs['node_size'] = 2800
+            kwargs['font_size'] = 21
+            kwargs['font_weight'] = 'bold'
+        else:
+            w, h = 8, 2
+            kwargs['node_shape'] = Path(np.array([[-w, -h], [-w, h], [w, h], [w, -h], [-w, -h]]))
+            kwargs['node_size'] = 30000
+            kwargs['font_size'] = 23
+            kwargs['font_weight'] = 'normal'
+        return kwargs
+
+    @staticmethod
+    def _draw(tree: nx.DiGraph) -> Figure:
+        """Draws the tree and returns the figure."""
+        # create data structures for leaf nodes, non-leaf nodes, and edges to be plotted separately
+        leafs = {node: data for node, data in tree.nodes(data=True) if data['kind'] == 'leaf'}
+        nodes = {node: data for node, data in tree.nodes(data=True) if data['kind'] != 'leaf'}
+        edges = tree.edges(data=True)
+        fig = plt.figure(figsize=Game.FIGSIZE)
+        # use the same plotting routine for leaf nodes, non leaf nodes, and edges
+        # this is due to the fact that node_shape and node_size accept a single value only
+        # but we need to distinguish between leaf nodes (squared) and non-leaf nodes (rectangular)
+        for nodelist, edgelist, leaves in [(leafs, {}, True), (nodes, {}, False), ({}, edges, False)]:
+            nx.draw(
+                tree,
+                nodelist=list(nodelist),
+                edgelist=list(edgelist),
+                pos=nx.get_node_attributes(tree, name='pos'),
+                labels={node: data['label'] for node, data in nodelist.items()},
+                edgecolors=[data['edge'] for data in nodelist.values()],
+                node_color=[data['color'] for data in nodelist.values()],
+                **Game._draw_kwargs(leaves=leaves)
+            )
+        # if a folder is not passed, plot the output, otherwise store it in the folder
+        fig.gca().set_xlim(0, 1)
+        return fig

@@ -4,11 +4,17 @@ from string import ascii_lowercase
 from typing import Any, Callable, Literal, List, Optional, Tuple, Iterable, Dict
 
 import numpy as np
+from docx import Document
+from docx.enum.text import WD_ALIGN_PARAGRAPH
+from docx.shared import Cm
+from sympy.parsing.sympy_parser import parse_expr
+
+from src.exercise import Exercise
 
 LETTERS: List[str] = list(ascii_lowercase)
 """List of lowercase letters to index constraints."""
 
-ORDINAL: List[str] = ['FIRST', 'SECOND', 'THIRD', 'FOURTH', 'FIFTH', 'SIXTH', 'SEVENTH', 'EIGHTH', 'NINTH', 'TENTH']
+ORDINAL: List[str] = ['First', 'Second', 'Third', 'Fourth', 'Fifth', 'Sixth', 'Seventh', 'Eighth', 'Ninth', 'Tenth']
 """List of ordinal numbers to index iterations."""
 
 VOWELS: List[str] = ['a', 'e', 'i', 'o', 'u', 'A', 'E', 'I', 'O', 'U']
@@ -247,7 +253,7 @@ class Constraint:
 
     def __post_init__(self):
         assert isinstance(self._var1, Variable), f"Expected variable as var1, got {type(self._var1)}"
-        assert isinstance(self._var2, Variable), f"Expected variable as var1, got {type(self._var2)}"
+        assert isinstance(self._var2, Variable), f"Expected variable as var2, got {type(self._var2)}"
 
     def __repr__(self) -> str:
         return self.name
@@ -289,105 +295,161 @@ class Constraint:
         return result[var1.name], result[var2.name]
 
 
-class CSP:
-    """A CSP exercise instance."""
+class CSP(Exercise):
 
-    def __init__(self):
-        self._output: Optional[Dict[str, str]] = None
-        """The output of the CSP exercise (text and solution)."""
-
-        self._variables: List[Domain] = []
+    def __init__(self,
+                 variables: Dict[str, List[int]],
+                 constraints: List[str],
+                 kind: Optional[Literal['consistency', 'forward', 'lookahead']] = None,
+                 assign: Optional[int] = None):
+        """A CSP exercise instance defined by its variables and constraints. The 'kind' parameter defines which type of
+        exercise to build, either Arc Consistency, Forward Checking, or Full Lookahead (if 'kind' is None, a random
+        type will be selected). The 'assign' parameter is used in Full Lookahead only and defines the value to be
+        assigned to the first variable (if None, a random value will be selected).
+        """
+        self._variables: List[Domain] = [Domain(_domain=dom, name=var, csp=self) for var, dom in variables.items()]
         """The variables involved in the CSP."""
 
-        self._constraints: List[Constraint] = []
+        self._constraints: List[Constraint] = [parse_expr(
+            cst,
+            local_dict={v.name: v for v in self._variables},
+            evaluate=True
+        )(self) for cst in constraints]
         """The constraints involved in the CSP."""
 
-    def variable(self, *domain: int, name: str) -> Variable:
-        """Adds a variable in the CSP."""
-        assert name not in [v.name for v in self._variables], f"There is already a variable named '{name}' in the csp"
-        var = Domain(_domain=list(domain), name=name, csp=self)
-        self._variables.append(var)
-        return var
+        kind = np.random.choice(['consistency', 'forward', 'lookahead']) if kind is None else kind
+        if kind == 'lookahead':
+            assign = np.random.choice(self._variables[0].domain) if assign is None else assign
+        else:
+            assign = None
 
-    def constraint(self, constraint: Callable[[Any], Constraint]) -> Constraint:
-        """Adds a constraint in the CSP."""
-        cst = constraint(self)
-        assert cst.var1.csp == self, f"First variable {cst.var1} does not belong to this csp."
-        assert cst.var2.csp == self, f"Second variable {cst.var2} does not belong to this csp."
-        self._constraints.append(cst)
-        return cst
+        self.kind: Literal['consistency', 'forward', 'lookahead'] = kind
+        """The kind of exercise to build."""
 
-    def consistency(self, folder: Optional[str] = None):
-        """Performs arc-consistency on the CSP and stores the results in the given folder (or prints if None)."""
-        # initialize the exercise with the correct text
-        self._init('Apply the Arc-consistency to the CSP and show the final domains of the variables.')
+        self.assign: Optional[int] = assign
+        """The assignment of the first variable in Full Lookahead (or None if a different kind is selected)."""
+
+    def text(self, doc: Document):
+        doc.add_paragraph('Given the following CSP:')
+        doc.add_paragraph()
+        for var in self._variables:
+            doc.add_paragraph(f'{var}::{var.string(original=True)}')
+        doc.add_paragraph()
+        for cst in self._constraints:
+            doc.add_paragraph(f'{cst}')
+        doc.add_paragraph()
+        if self.kind == 'consistency':
+            doc.add_paragraph('Apply Arc Consistency to the CSP and show the final domains of the variables.')
+        elif self.kind == 'forward':
+            p = doc.add_paragraph('Find the first solution through tree search, by applying Forward Checking, ')
+            p.add_run('using alphabetical order of variables and lexicographic order of values.')
+        elif self.kind == 'lookahead':
+            p = doc.add_paragraph('Apply Full Lookahead to the CSP, and show the domains of the variables when ')
+            p.add_run(f'{self._variables[0]}').bold = True
+            p.add_run(' is instantiated to ')
+            p.add_run(f'{self.assign}').bold = True
+            p.add_run(' (consider the variables according to the numerical order).')
+        else:
+            raise AssertionError(f"Unknown exercise kind '{self.kind}'")
+
+    def solution(self, doc: Document):
+        if self.kind == 'consistency':
+            self._consistency(doc)
+        elif self.kind == 'forward':
+            self._forward(doc)
+        elif self.kind == 'lookahead':
+            self._lookahead(doc)
+        else:
+            raise AssertionError(f"Unknown exercise kind '{self.kind}'")
+
+    def _consistency(self, doc: Document):
+        """Performs arc-consistency on the CSP and prints the results."""
         # start the solution computation by iterating until the domains are not changed
         iteration = 0
         finished = False
+        p0 = doc.add_paragraph()  # keep reference to first paragraph to prepend the final solution
+        infeasible = False
         while not finished:
             finished = True
             # log the initial iteration message
-            message = '' if iteration == 0 else ' (since the domains have changed during the last one)'
-            self._log(f'\n{ORDINAL[iteration]} ITERATION{message}:')
+            p = doc.add_paragraph()
+            p.add_run(f'{ORDINAL[iteration]} Iteration').italic = True
+            if iteration != 0:
+                p.add_run(' (since the domains have changed during the last one)').italic = True
+            p.add_run(':').italic = True
+            doc.add_paragraph()
             # iterate over all the constraints
             for i, cst in enumerate(self._constraints):
                 # log the constraint and apply the domain reduction
-                self._log(f'\nApply ({ascii_lowercase[i]}) - {cst.name}')
+                p = doc.add_paragraph(f'Apply ({ascii_lowercase[i]}) - ')
+                p.add_run(cst.name).bold = True
                 res1, res2 = cst.reduce()
-                infeasible = False
                 # for both the variables involved (and their result), log the results
-                for var1, var2, res in [(cst.var1, cst.var2, res1), (cst.var2, cst.var1, res2)]:
-                    article = 'an' if var2.name[0] in VOWELS else 'a'
-                    self._log(f'  - For each {var1}, is there {article} {var2}?', end=' ')
+                for v1, v2, res in [(cst.var1, cst.var2, res1), (cst.var2, cst.var1, res2)]:
+                    article = 'an' if v2.name[0] in VOWELS else 'a'
+                    p = doc.add_paragraph(f'  - For each {v1}, is there {article} {v2}? ')
                     # if the variable domain is null, the problem is infeasible (break the inner loop)
-                    if len(var1.domain) == 0:
-                        self._log(f'There is no assignment for {var1} which could satisfy the constraint.')
-                        self._log('The problem is infeasible.')
+                    if len(v1.domain) == 0:
+                        p.add_run(f'There is no assignment for {v1} which could satisfy the constraint.')
+                        doc.add_paragraph('The problem is infeasible.')
                         infeasible = True
                         break
                     # if res = True, the domains did not change
                     elif res:
-                        self._log(f'Yes.')
+                        p.add_run('Yes.')
                     # otherwise, log the new domain.
                     else:
-                        self._log(f'No. The only values of {var1} which admit a solution are {var1.string()}.')
+                        p.add_run(f'No. The only values of {v1} which admit a solution are {v1.string()}.')
                 # if at least one domain was empty the problem is infeasible, hence break the outer loop
                 if infeasible:
+                    doc.add_paragraph()
+                    finished = True
                     break
                 # if both domains did not change, log a message
                 elif res1 and res2:
-                    self._log('Domains not changed.')
+                    doc.add_paragraph('Domains not changed.')
+                    doc.add_paragraph()
                 # otherwise, log the new domains
                 else:
-                    self._log(f'New domains:')
+                    finished = False
+                    doc.add_paragraph(f'New domains:')
                     for var in self._variables:
-                        self._log(f'{var}::{var.string()}')
-                        finished = False
+                        doc.add_paragraph(f'{var}::{var.string()}')
+                    doc.add_paragraph()
             # increase iteration
             iteration += 1
         # log end
-        self._log('\nALGORITHM TERMINATION.')
-        # prepend the introduction of the solution, then log it with prepend = True
-        introduction = 'By applying arc-consistency, the variables domains are reduced as follows:\n\n'
-        for var in self._variables:
-            introduction += f'{var}::{var.string()}\n'
-        introduction += '\nAPPLIED REASONING:\n'
-        introduction += '\nWe start with the following domains:\n'
-        for var in self._variables:
-            introduction += f'{var}::{var.string(original=True)}\n'
-        introduction += '\nAnd with the following set of constraints:\n'
-        for i, cst in enumerate(self._constraints):
-            introduction += f'{ascii_lowercase[i]}) {cst}\n'
-        self._log(introduction, end='', pre=True)
-        # store the results
-        self._save(folder=folder, name='consistency')
+        p = doc.add_paragraph()
+        p.add_run('Algorithm Termination.').italic = True
+        # prepend the introduction of the solution
+        if infeasible:
+            p0.insert_paragraph_before('By applying arc-consistency, we find that the problem is infeasible:')
+            p0.insert_paragraph_before()
+            p = p0.insert_paragraph_before()
+            r = p.add_run('Applied Reasoning')
+            r.bold = True
+            r.italic = True
+        else:
+            p0.insert_paragraph_before('By applying arc-consistency, the variables domains are reduced as follows:')
+            for var in self._variables:
+                p0.insert_paragraph_before(f'{var}::{var.string()}')
+            p0.insert_paragraph_before()
+            p = p0.insert_paragraph_before()
+            r = p.add_run('Applied Reasoning')
+            r.bold = True
+            r.italic = True
+            p0.insert_paragraph_before()
+            p0.insert_paragraph_before('We start with the following domains:')
+            for var in self._variables:
+                p0.insert_paragraph_before(f'{var}::{var.string(original=True)}')
+            p0.insert_paragraph_before()
+            p0.insert_paragraph_before('And with the following set of constraints:')
+            for cst in self._constraints:
+                p0.insert_paragraph_before(f'{cst}')
 
-    def forward(self, folder: Optional[str] = None):
-        """Performs forward check on the CSP and stores the results in the given folder (or prints if None)."""
-        # initialize the exercise with the correct text
-        exercise = 'Find the first solution through tree search, by applying forward checking, '
-        exercise += 'using alphabetical order of variables and lexicographic order of values.'
-        self._init(exercise)
+    def _forward(self, doc: Document):
+        """Performs forward check on the CSP and prints the result."""
+        rows = []
 
         # recursively try to find solution by checking variables' domains iteratively
         def solve(idx: int, domains: List[np.ndarray]) -> bool:
@@ -408,7 +470,7 @@ class CSP:
                             fail = True
                             break
                 # log the results based on whether the process failed or not
-                self._log('Backtracking ' if fail else 'Labeling & FC', end=' ' * (LONG_TAB - 13) + ' | ')
+                row = ['Backtracking' if fail else 'Labeling & FC']
                 post_fail = False
                 # for each variable, log:
                 #   - var = domains[i][0] (a unique value since already assigned) for previous variables
@@ -418,18 +480,17 @@ class CSP:
                 #   - '///' if the variable comes after one who failed
                 for i, var in enumerate(self._variables):
                     if i < idx:
-                        msg = f'{var} = {domains[i][0]}'
+                        row.append(f'{var} = {domains[i][0]}')
                     elif i == idx:
-                        msg = f'{var} = {value}'
+                        row.append(f'{var} = {value}')
                     elif post_fail:
-                        msg = f'///'
+                        row.append(f'---')
                     elif len(var.domain) == 0:
-                        msg = f'FAIL'
+                        row.append(f'Fail')
                         post_fail = True
                     else:
-                        msg = var.string()
-                    self._log(msg, end=' ' * (TAB - len(msg)) + ' | ')
-                self._log()
+                        row.append(var.string())
+                rows.append(row)
                 # in case of the procedure did not fail and the problem can be solved, return true
                 if not fail and solve(idx=idx + 1, domains=[var.domain.copy() for var in self._variables]):
                     return True
@@ -438,33 +499,60 @@ class CSP:
                     var.domain = domains[i]
             return False
 
+        # start to solve from the first variable
+        solved = solve(idx=0, domains=[v.domain.copy() for v in self._variables])
         # log the initial information
         for v in self._variables:
-            self._log(f'{v}::{v.string(original=True)}')
-        self._log()
+            doc.add_paragraph(f'{v}::{v.string(original=True)}')
+        doc.add_paragraph()
         for c in self._constraints:
-            self._log(str(c))
-        self._log('\n', end=' ' * LONG_TAB + ' | ')
-        for v in self._variables:
-            self._log(v.name, end=' ' * (TAB - len(v.name)) + ' | ')
-        self._log('\n' + '-' * (LONG_TAB + 3 + (TAB + 3) * len(self._variables)))
-        # start to solve from the first variable and log only if infeasible
-        if not solve(idx=0, domains=[v.domain.copy() for v in self._variables]):
-            self._log('\nThe problem is infeasible.')
-        # store the results
-        self._save(folder=folder, name='forward')
+            doc.add_paragraph(f'{c}')
+        doc.add_paragraph()
+        table = doc.add_table(1, len(self._variables) + 1)
+        table.rows[0].height = Cm(0.65)
+        cells = table.rows[0].cells
+        for n, v in enumerate(self._variables):
+            cells[n + 1].text = v.name
+            cells[n + 1].paragraphs[0].runs[0].font.bold = True
+        for cells in rows:
+            r = table.add_row()
+            r.height = Cm(0.65)
+            for n, c in enumerate(cells):
+                r.cells[n].text = c
+                if c == 'Fail':
+                    r.cells[n].paragraphs[0].runs[0].font.bold = True
+                    r.cells[n].paragraphs[0].runs[0].font.italic = True
+        # log only if infeasible
+        if not solved:
+            doc.add_paragraph()
+            doc.add_paragraph('The problem is infeasible.')
+        table.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        table.style = 'Table Grid'
 
-    def lookahead(self, assign: int, folder: Optional[str] = None):
-        """Performs full look-ahead on the CSP and stores the results in the given folder (or prints if None).
-        The assign value is assigned to the first variable in the CSP."""
+    def _lookahead(self, doc: Document):
+        """Performs full look-ahead on the CSP and prints the results."""
         # assigns the value to the new domain
         var = self._variables[0]
-        assert assign in var.domain, f"Domain of variable {var} is {var.domain}, trying to assign value {assign}"
-        self._variables[0].domain = [assign]
-        # initialize the exercise with the correct text
-        exercise = f'Apply the Full Look Ahead (FLA) to the CSP, and show the domains of the variables when {var} is '
-        exercise += f'instantiated to {assign} (consider the variables according to the numerical order).'
-        self._init(exercise=exercise)
+        assert self.assign in var.domain, f"Domain of {var} is {var.domain}, trying to assign value {self.assign}"
+        self._variables[0].domain = [self.assign]
+        # print the initial text
+        doc.add_paragraph('We start from the CSP:')
+        doc.add_paragraph()
+        for v in self._variables:
+            doc.add_paragraph(f'{v}::{var.string(original=True)}')
+        doc.add_paragraph()
+        for c in self._constraints:
+            doc.add_paragraph(f'{c}')
+        doc.add_paragraph()
+        p = doc.add_paragraph()
+        r = p.add_run('Apply Full Lookahead starting from the constraints involving variable ')
+        r.bold = True
+        r.italic = True
+        p.add_run(f'{var}').bold = True
+        r = p.add_run(':')
+        r.bold = True
+        r.italic = True
+        doc.add_paragraph()
         # order the constraints depending on whether the assigned variable appears or not
         constraints = {'var': [], 'other': []}
         for cst in self._constraints.copy():
@@ -475,56 +563,22 @@ class CSP:
         for cst in [cst for key, cst_list in constraints.items() for cst in cst_list]:
             # apply the constraints
             cst.reduce()
-            self._log(f'Apply {cst}:')
+            doc.add_paragraph(f'Apply {cst}:')
             if len(cst.var1.domain) == 0 or len(cst.var2.domain) == 0:
-                self._log(f'There is no assignment which could satisfy the constraint.')
-                self._log('The problem is infeasible.')
+                doc.add_paragraph(f' There is no assignment which could satisfy the constraint.')
                 feasible = False
                 break
             else:
-                self._log(f'{cst.var1}::{cst.var1.string()}')
-                self._log(f'{cst.var2}::{cst.var2.string()}')
-            self._log()
+                doc.add_paragraph(f' {cst.var1}::{cst.var1.string()}')
+                doc.add_paragraph(f' {cst.var2}::{cst.var2.string()}')
+            doc.add_paragraph()
         # if the problem is feasible, log the final domains
+        p = doc.add_paragraph()
         if feasible:
-            self._log('\nFinal Domains:')
-            self._log(f'{var} = {assign}')
+            p.add_run('The final domains are:').italic = True
+            doc.add_paragraph(f' {var} = {self.assign}')
             for var in self._variables[1:]:
-                self._log(f'{var}::{var.string()}')
-        # store the results
-        self._save(folder=folder, name='lookahead')
-
-    def _init(self, exercise: str):
-        """Initializes the solution process."""
-        # check that the problem was not already solved
-        assert self._output is None, "This csp has been already solved"
-        # build the exercise text
-        text = 'Given the following CSP:\n\n'
-        for var in self._variables:
-            text += f'{var}::{var.string(original=True)}\n'
-        text += '\n'
-        for cst in self._constraints:
-            text += f'{cst}\n'
-        text += f'\n{exercise}'
-        # initialize the output
-        self._output = dict(text=text, solution='')
-
-    def _log(self, message: str = '', end: str = '\n', pre: bool = False, solution: bool = True):
-        """Logs a message in the output string (prepends if pre = True), either the text or the solution."""
-        key = 'solution' if solution else 'text'
-        if pre:
-            self._output[key] = message + end + self._output[key]
+                doc.add_paragraph(f' {var}::{var.string()}')
         else:
-            self._output[key] = self._output[key] + message + end
-
-    def _save(self, folder: Optional[str], name: str):
-        """Stores the output in the given folder (or prints it if None)."""
-        if folder is None:
-            for key, output in self._output.items():
-                print(f'{key.upper()}:')
-                print(output)
-                print()
-        else:
-            for key, output in self._output.items():
-                with open(file=f'{folder}/{name}_{key}.txt', mode='w') as f:
-                    f.write(output)
+            p = doc.add_paragraph()
+            p.add_run('The problem is infeasible.').italic = True

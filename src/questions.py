@@ -1,9 +1,13 @@
-from typing import List, Optional
+from typing import List, Optional, Literal
 
 import numpy as np
+from docx import Document
+
+from src.exercise import Exercise
+from src.planning import Planning
 
 
-class Questions:
+class Questions(Exercise):
     NUM: int = 3
     """The number of questions to select from the list of options."""
 
@@ -32,7 +36,7 @@ class Questions:
         'What are the main features of decision trees compared to neural networks?',
         'What is backpropagation?',
         'What is the theta-subsumption lattice?',
-        'What is conditional planning and which are its main features.',
+        'What is conditional planning and which are its main features?',
         'What is reinforcement learning and which tasks it solves best?',
         'What is the ant colony algorithm and which are its main features?',
         'What is the modal truth criterion and for what reason it has been defined.',
@@ -40,34 +44,54 @@ class Questions:
     ]
     """The list of options for intsys questions."""
 
-    @staticmethod
-    def faikr(action: str, folder: Optional[str] = None):
-        """Selects questions from the list of options and stores the result in the given folder (or prints if None).
-        Additionally, the name of the action to be modelled with Kowalsky formulation must be passed."""
-        questions = [
-            f'Model the action {action} (preconditions, effects and frame axioms),'
-            ' and the initial state of the exercise 4 using the Kowalsky formulation,',
-            'Build two levels of graph plan for the exercise 4.'
-        ]
-        questions += list(np.random.choice(Questions.FAIKR, size=Questions.NUM, replace=False))
-        Questions._save(questions, folder=folder, name='faikr')
+    def __init__(self, planning: Optional[Planning], exam: Literal['faikr', 'intsys']):
+        """Selects the open questions for the final exercise, plus the additional exercises related to planning."""
+        self.planning: Optional[Planning] = planning
+        self.exam: Literal['faikr', 'intsys'] = exam
 
-    @staticmethod
-    def intsys(folder: Optional[str] = None):
-        """Selects questions from the list of options and stores the result in the given folder (or prints if None)."""
-        questions = ['Build two levels of graph plan for the exercise 3.']
-        questions += list(np.random.choice(Questions.INTSYS, size=Questions.NUM, replace=False))
-        Questions._save(questions, folder=folder, name='intsys')
-
-    @staticmethod
-    def _save(questions: List[str], folder: Optional[str], name: str):
-        """Stores the output in the given folder (or prints it if None)."""
-        if folder is None:
-            print(name.upper())
-            for i, question in enumerate(questions):
-                print(f'{i + 1})  {question}')
-            print()
+    def text(self, doc: Document):
+        if self.exam == 'faikr':
+            p = doc.add_paragraph(' 1)  Model the action ')
+            p.add_run('<action>' if self.planning is None else self.planning.action).bold = True
+            p.add_run(' (preconditions, effects and frame axioms), and the ')
+            p.add_run('initial state').bold = True
+            p.add_run(' of the Exercise 4 using the Kowalsky formulation')
+            doc.add_paragraph(' 2)  Build two levels of graph plan for the Exercise 4.')
+            questions = Questions.FAIKR
+            n = 3
+        elif self.exam == 'intsys':
+            doc.add_paragraph(' 1)  Build two levels of graph plan for the Exercise 3.')
+            questions = Questions.INTSYS
+            n = 2
         else:
-            with open(file=f'{folder}/{name}.txt', mode='w') as f:
-                for i, question in enumerate(questions):
-                    f.write(f'{i + 1})  {question}\n')
+            raise AssertionError(f"Unknown exam '{self.exam}'")
+        for i, q in enumerate(np.random.choice(questions, size=Questions.NUM, replace=False)):
+            doc.add_paragraph(f' {i + n})  {q}')
+
+    def solution(self, doc: Document):
+        if self.exam == 'faikr':
+            doc.add_paragraph(' 1)  Kowalski Formulation')
+            self._kowalski(doc)
+            doc.add_paragraph(' 2)  Graph Plan')
+            self._graphplan(doc)
+        elif self.exam == 'intsys':
+            p = doc.add_paragraph()
+            p.add_run(' Graphplan').bold = True
+            self._graphplan(doc)
+        else:
+            raise AssertionError(f"Unknown exam '{self.exam}'")
+
+    def _kowalski(self, doc: Document):
+        """Prints the kowalski formulation."""
+        if self.planning is None:
+            doc.add_paragraph()
+            return
+        raise NotImplementedError()
+
+    # noinspection PyMethodMayBeStatic
+    def _graphplan(self, doc: Document):
+        """Prints the graphplan."""
+        if self.planning is None:
+            doc.add_paragraph()
+            return
+        raise NotImplementedError()
