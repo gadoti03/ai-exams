@@ -310,12 +310,17 @@ class CSP(Exercise):
         self._variables: List[Domain] = [Domain(_domain=dom, name=var, csp=self) for var, dom in variables.items()]
         """The variables involved in the CSP."""
 
-        self._constraints: List[Constraint] = [parse_expr(
-            cst,
-            local_dict={v.name: v for v in self._variables},
-            evaluate=True
-        )(self) for cst in constraints]
+        self._constraints: List[Constraint] = []
         """The constraints involved in the CSP."""
+
+        local = {v.name: v for v in self._variables}
+        for cst in constraints:
+            exp = parse_expr(cst, local_dict=local, evaluate=True)
+            try:
+                self._constraints.append(exp(self))
+            except AssertionError:
+                raise AssertionError(f"Error with constraint: {cst} "
+                                     f"(either the constraint is not binary or it involves undefined variables)")
 
         kind = np.random.choice(['consistency', 'forward', 'lookahead']) if kind is None else kind
         if kind == 'lookahead':

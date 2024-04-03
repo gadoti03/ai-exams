@@ -1,4 +1,4 @@
-from typing import List, Optional, Literal
+from typing import List, Optional
 
 import numpy as np
 from docx import Document
@@ -44,15 +44,19 @@ class Questions(Exercise):
     ]
     """The list of options for intsys questions."""
 
-    def __init__(self, planning: Optional[Planning], exam: Literal['faikr', 'intsys']):
+    def __init__(self, planning: Optional[Planning], exam: str, kowalski: Optional[str] = None):
         """Selects the open questions for the final exercise, plus the additional exercises related to planning."""
+        if planning is not None and kowalski is None and exam == 'faikr':
+            kowalski = np.random.choice(list(planning.actions))
+
         self.planning: Optional[Planning] = planning
-        self.exam: Literal['faikr', 'intsys'] = exam
+        self.kowalski: Optional[str] = kowalski
+        self.exam: str = exam
 
     def text(self, doc: Document):
         if self.exam == 'faikr':
             p = doc.add_paragraph(' 1)  Model the action ')
-            p.add_run('<action>' if self.planning is None else self.planning.action).bold = True
+            p.add_run(self.kowalski).bold = True
             p.add_run(' (preconditions, effects and frame axioms), and the ')
             p.add_run('initial state').bold = True
             p.add_run(' of the Exercise 4 using the Kowalsky formulation')
@@ -70,28 +74,18 @@ class Questions(Exercise):
 
     def solution(self, doc: Document):
         if self.exam == 'faikr':
-            doc.add_paragraph(' 1)  Kowalski Formulation')
-            self._kowalski(doc)
-            doc.add_paragraph(' 2)  Graph Plan')
-            self._graphplan(doc)
+            doc.add_paragraph(f'1) Kowalski formulation of the initial state and action {self.kowalski}')
+            doc.add_paragraph()
+            if self.planning is not None:
+                self.planning.kowalski(doc, action=self.kowalski)
+                doc.add_paragraph()
+            doc.add_paragraph('2) Graph Plan')
+            if self.planning is not None:
+                self.planning.graphplan(doc)
         elif self.exam == 'intsys':
             p = doc.add_paragraph()
             p.add_run(' Graphplan').bold = True
-            self._graphplan(doc)
+            if self.planning is not None:
+                self.planning.graphplan(doc)
         else:
             raise AssertionError(f"Unknown exam '{self.exam}'")
-
-    def _kowalski(self, doc: Document):
-        """Prints the kowalski formulation."""
-        if self.planning is None:
-            doc.add_paragraph()
-            return
-        raise NotImplementedError()
-
-    # noinspection PyMethodMayBeStatic
-    def _graphplan(self, doc: Document):
-        """Prints the graphplan."""
-        if self.planning is None:
-            doc.add_paragraph()
-            return
-        raise NotImplementedError()

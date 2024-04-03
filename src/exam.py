@@ -1,5 +1,5 @@
 import os
-from typing import Dict, List
+from typing import Dict, List, Any
 
 import yaml
 from docx import Document
@@ -12,6 +12,7 @@ from src.exercise import Exercise, Dummy
 from src.game import Game
 from src.planning import Planning
 from src.questions import Questions
+from src.search import Search
 from src.training import Training
 
 
@@ -25,7 +26,7 @@ class Exam:
         with open(path, 'r') as file:
             config = yaml.safe_load(file)
 
-        self.config: Dict = config
+        self.config: Dict[str, Any] = config
         """The configuration file of the exam."""
 
         self.path: str = os.path.join(exports, exam.replace('.yml', '.docx'))
@@ -75,20 +76,21 @@ class Exam:
         output = []
         planning = None  # keep a reference to the planning exercise to be passed to the questions exercise
         for exercise, kwargs in self.config['exercises'].items():
-            if exercise is None:
+            if exercise == 'dummy':
                 assert kwargs is None, "No arguments expected for empty exercise"
                 exercise = Dummy()
             elif exercise == 'game':
                 assert kwargs is None, "No arguments expected for game exercise"
                 exercise = Game()
+            elif exercise == 'search':
+                exercise = Search(**kwargs)
             elif exercise == 'csp':
                 exercise = CSP(**kwargs)
             elif exercise == 'planning':
-                exercise = Dummy()
-                # exercise = Planning(**kwargs)
-                # planning = exercise
+                exercise = Planning(**kwargs)
+                planning = exercise
             elif exercise == 'questions':
-                exercise = Questions(planning=planning, exam=kwargs)
+                exercise = Questions(planning=planning, **kwargs)
             elif exercise == 'training':
                 exercise = Training(**kwargs)
             else:
