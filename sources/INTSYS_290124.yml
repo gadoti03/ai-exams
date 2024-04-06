@@ -1,0 +1,69 @@
+exam: INTELLIGENT SYSTEMS M
+
+date: 29/01/2024
+
+exercises:
+  # training set exercise
+  #  - output: name of the output column
+  #  - **kwargs: <name of the input column: list of possible values>
+  training:
+    output: Test
+    Framework: [V1, V2]
+    Plane: [Airbus, Boeing, Comac]
+
+  # empty exercise to be filled manually
+  dummy: null
+
+  # planning exercise
+  #  - init: list of propositions ([name, param_1, ..., param_N]) representing the initial state
+  #  - init: list of propositions ([name, param_1, ..., param_N]) representing the goal state
+  #  - **kwargs: actions defined as a dictionary with keys:
+  #       * variables -> dictionary of variables mapped with possible values they can take
+  #       * precond -> list of propositions necessary for the precondition
+  #       * delete -> list of propositions in the delete list
+  #       * add -> list of propositions in the add list
+  planning:
+    init:
+      - [has_slides, ml]
+      - [is_awake]
+
+    goal:
+      - [has_knowledge, ml]
+      - [has_knowledge, cv]
+
+    study:
+      variables:
+        Subject: [ml, cv]
+      precond:
+        - [is_awake]
+        - [has_slides, Subject]
+      delete:
+        - [is_awake]
+      add:
+        - [is_sleeping]
+        - [has_knowledge, Subject]
+
+    swap_slides:
+      variables:
+        Subject1: [ml, cv]
+        Subject2: [ml, cv]
+      precond:
+        - [has_slides, Subject1]
+      delete:
+        - [has_slides, Subject1]
+      add:
+        - [has_slides, Subject2]
+
+    drink_coffe:
+      variables:
+      precond:
+        - [is_sleeping]
+      delete:
+        - [is_sleeping]
+      add:
+        - [is_awake]
+
+  # open questions
+  #  - exam: the exam type, used to select the pool of questions
+  questions:
+    exam: intsys

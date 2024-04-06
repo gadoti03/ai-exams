@@ -1,0 +1,109 @@
+exam: FUNDAMENTALS OF AI - FIRST MODULE
+
+date: 29/01/2024
+
+exercises:
+  # game tree exercise:
+  #  - no parameters (null)
+  game: null
+
+  # search strategy exercise:
+  #  - source: ID of the source node
+  #  - destination: ID of the destination node
+  #  - nodes: dictionary of node IDs mapped to their heuristic value
+  #  - arcs: list of triplets (sourceID, destinationID, weight)
+  search:
+    source: A
+    destination: D
+    nodes:
+      A: 5.0
+      B: 4.0
+      C: 4.0
+      D: 0.0
+      E: 1.0
+      F: 3.0
+    # noinspection YAMLIncompatibleTypes
+    arcs:
+      - [A, B, 3.0]
+      - [A, C, 4.0]
+      - [A, D, 18.0]
+      - [B, F, 5.0]
+      - [C, D, 12.0]
+      - [C, F, 3.0]
+      - [E, D, 3.0]
+      - [F, E, 1.0]
+
+  # csp exercise:
+  #  - variables: dictionary of variable IDs mapped to their domain
+  #  - constraints: *binary* constraints between variables (only basic operators like +, -, *, and / are supported)
+  #  - kind (optional): exercise type, either 'consistency', 'forward', or 'lookahead' (if null, chosen randomly)
+  #  - assign (optional): value assignment for the first variable in 'lookahead' (if null, chosen randomly)
+  csp:
+    variables:
+      A: [1, 2, 3, 4, 5]
+      B: [1, 2, 3, 4, 5]
+      C: [1, 2, 3, 4, 5]
+      D: [1, 2, 3, 4, 5]
+    constraints:
+      - A > B
+      - C > B + 1
+      - A == D - 1
+      - B == D - 3
+    kind: lookahead
+    assign: 3
+
+    # planning exercise
+  #  - init: list of propositions ([name, param_1, ..., param_N]) representing the initial state
+  #  - init: list of propositions ([name, param_1, ..., param_N]) representing the goal state
+  #  - **kwargs: actions defined as a dictionary with keys:
+  #       * variables -> dictionary of variables mapped with possible values they can take
+  #       * precond -> list of propositions necessary for the precondition
+  #       * delete -> list of propositions in the delete list
+  #       * add -> list of propositions in the add list
+  planning:
+    init:
+      - [has_slides, ml]
+      - [is_awake]
+
+    goal:
+      - [has_knowledge, ml]
+      - [has_knowledge, cv]
+
+    study:
+      variables:
+        Subject: [ml, cv]
+      precond:
+        - [is_awake]
+        - [has_slides, Subject]
+      delete:
+        - [is_awake]
+      add:
+        - [is_sleeping]
+        - [has_knowledge, Subject]
+
+    swap_slides:
+      variables:
+        Subject1: [ml, cv]
+        Subject2: [ml, cv]
+      precond:
+        - [has_slides, Subject1]
+      delete:
+        - [has_slides, Subject1]
+      add:
+        - [has_slides, Subject2]
+
+    drink_coffe:
+      variables:
+      precond:
+        - [is_sleeping]
+      delete:
+        - [is_sleeping]
+      add:
+        - [is_awake]
+
+  # open questions
+  #  - exam: the exam type, used to select the pool of questions
+  #  - kowalski (optional): name of the action to be modeled (if null, chosen randomly)
+  questions:
+    exam: faikr
+    kowalski: swap_slides
