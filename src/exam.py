@@ -76,10 +76,7 @@ class Exam:
         output = []
         planning = None  # keep a reference to the planning exercise to be passed to the questions exercise
         for exercise, kwargs in self.config['exercises'].items():
-            if exercise == 'dummy':
-                assert kwargs is None, "No arguments expected for empty exercise"
-                exercise = Dummy()
-            elif exercise == 'game':
+            if exercise == 'game':
                 assert kwargs is None, "No arguments expected for game exercise"
                 exercise = Game()
             elif exercise == 'search':
@@ -94,7 +91,8 @@ class Exam:
             elif exercise == 'training':
                 exercise = Training(**kwargs)
             else:
-                raise AssertionError(f"Unknown exercise '{exercise}'")
+                assert kwargs is None, f"No arguments expected for empty dummy exercise named '{exercise}'"
+                exercise = Dummy()
             output.append(exercise)
         return output
 
