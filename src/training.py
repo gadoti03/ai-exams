@@ -133,7 +133,7 @@ class Training(Exercise):
         for index in nan_indices:
             feature = np.random.choice(list(inputs.keys()))
             value = np.random.choice(list(inputs[feature]))
-            self._inputs[feature][index] = value
+            self._inputs.loc[index, feature] = value
         # build the output as a series of [True, False] values, with the same size as the inputs, and the given name
         self._output: pd.Series = pd.Series(np.random.choice([True, False], size=len(self._inputs)), name=output)
         # randomly choose one value from the first input column which will be part of the final instance
