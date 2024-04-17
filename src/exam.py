@@ -80,7 +80,7 @@ class Exam:
                 assert kwargs is None, "No arguments expected for game exercise"
                 exercise = Game()
             elif exercise == 'search':
-                exercise = Search(**kwargs)
+                exercise = Search() if kwargs is None else Search(**kwargs)
             elif exercise == 'csp':
                 exercise = CSP(**kwargs)
             elif exercise == 'planning':

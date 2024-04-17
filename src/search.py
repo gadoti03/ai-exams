@@ -9,6 +9,7 @@ from docx.enum.text import WD_ALIGN_PARAGRAPH
 from docx.shared import Cm
 
 from src.exercise import Exercise
+from string import ascii_uppercase
 
 COLORS: Dict[str, str] = {
     'source': '#EC604A',
@@ -18,15 +19,75 @@ COLORS: Dict[str, str] = {
     'explored': '#37A2FC'
 }
 
+LETTERS: List[str] = list(ascii_uppercase)
+
+
+def arc(distance: int) -> float:
+    # nodes that are "more distant" from the destination should have more connections
+    probability = 0.8 ** distance
+    return np.random.random() >= probability
+
+
+def weight(distance: int) -> int:
+    # nodes that are "more distant" between each other should have higher weights
+    rnd = np.random.random_integers(8)
+    return int(rnd + 1.25 * distance)
+
+
+def heuristic(distance: int) -> int:
+    # sample from gaussian and clip to the interval [1, shortest path value] to be a valid heuristic
+    rnd = np.random.normal(loc=4, scale=3)
+    return int(np.clip(rnd, a_min=1, a_max=distance))
+
 
 class Search(Exercise):
-    def __init__(self, source: str, destination: str, nodes: Dict[str, float], arcs: List[Tuple[str, str, float]]):
+    def __init__(self,
+                 nodes: int | List[str] | Dict[str, float] = 7,
+                 arcs: None | List[Tuple[str, str, float]] = None,
+                 destination: None | str = None,
+                 source: str = 'A', ):
         """A search strategy exercise, defined by graph information."""
+
+        # handle nodes
+        if isinstance(nodes, int):
+            nodes = {n: None for n in LETTERS[:nodes]}
+        elif isinstance(nodes, list):
+            nodes = {n: None for n in nodes}
+        # pick destination
+        if destination is None:
+            destination = np.random.choice([n for n in nodes if n != source])
+        # handle arcs (i.e., build a graph where each node has a path to the destination)
+        #  1. sort nodes from destination to source, with random shuffling for internal nodes
+        #  2. iterate over each node
+        #      a) if there is no path connecting the node to the destination, add a direct arc
+        #      b) for each of the following node, add a direct arc with probability p
+        #      c) when adding an arc, choose a random positive integer weight up to a maximal value
+        #  3. whenever a node is connected directly to the destination, or it is connected to another node who has
+        #     been already marked connected, the node itself becomes connected as there is a valid path
+        if arcs is None:
+            arcs = []
+            nodelist = [n for n in nodes if n != source and n != destination]
+            np.random.shuffle(nodelist)
+            nodelist = [destination, *nodelist, source]
+            connected = {n: n == destination for n in nodelist}
+            for i, d in enumerate(nodelist):
+                if not connected[d]:
+                    # distance of node <d> from the destination (0)
+                    value = weight(distance=i)
+                    arcs.append((d, destination, float(value)))
+                    connected[d] = True
+                for j, s in enumerate(nodelist[i + 1:]):
+                    # distance of node <s> from the destination (0)
+                    if arc(distance=i + j + 1):
+                        # distance of node <s> from node <d>
+                        value = weight(distance=j + 1)
+                        arcs.append((s, d, float(value)))
+                        connected[s] = True
 
         # build graph
         graph = nx.DiGraph()
         for node, value in nodes.items():
-            graph.add_node(node, value=value, color=COLORS['intermediate'])
+            graph.add_node(node, color=COLORS['intermediate'])
         for (sour, dest, value) in arcs:
             graph.add_edge(sour, dest, value=value)
 
@@ -39,6 +100,17 @@ class Search(Exercise):
             graph.nodes[destination]['color'] = COLORS['destination']
         except KeyError:
             raise KeyError(f"Destination node '{destination}' is not in the list of nodes {list(nodes)}")
+
+        # handle heuristics
+        sp, _ = nx.single_source_dijkstra(graph.reverse(), source=destination, weight='value')
+        for node, path in sp.items():
+            value = nodes[node]
+            if node == destination:
+                value = 0
+            elif value is None:
+                # distance (in terms of path weight) between the node and the destination
+                value = heuristic(distance=path)
+            graph.nodes[node]['value'] = value
 
         self.source: str = source
         self.destination: str = destination
@@ -84,7 +156,7 @@ class Search(Exercise):
             pos=pos,
             edge_labels={(sour, dest): data['value'] for sour, dest, data in g.edges(data=True)},
             bbox=dict(facecolor='white', edgecolor='white', boxstyle='round,pad=0.5'),
-            label_pos=0.6,
+            label_pos=0.65,
             font_size=22,
             ax=fig.gca()
         )
@@ -107,7 +179,7 @@ class Search(Exercise):
                           'its cost?')
 
     def solution(self, doc: Document):
-        def draw_tree(tree: nx.DiGraph, path: List[int], heuristic: bool) -> plt.Figure:
+        def draw_tree(tree: nx.DiGraph, path: List[int], heuristically: bool) -> plt.Figure:
             # store list of initial nodes and compute the number of levels
             nodes = {node: data for node, data in tree.nodes(data=True)}
             levels = np.max([data['level'] for data in nodes.values()])
@@ -147,7 +219,7 @@ class Search(Exercise):
                 font_size=20,
                 ax=f.gca()
             )
-            if heuristic:
+            if heuristically:
                 nx.draw_networkx_labels(
                     tree,
                     pos={node: (i, j + 0.15) for node, (i, j) in pos.items()},
@@ -248,7 +320,7 @@ class Search(Exercise):
                 t.add_node(0, name=self.source, level=1, cost=0.0, value=val, heuristic=f'f=0.0+{val}={val}')
                 assert fn(tree=t), f"No solution found by {text}"
                 pth = get_path(t)
-                fig = draw_tree(t, path=pth, heuristic=h)
+                fig = draw_tree(t, path=pth, heuristically=h)
                 img = BytesIO()
                 fig.savefig(img, bbox_inches='tight', pad_inches=0)
                 doc.add_picture(img, width=Cm(12.5))
