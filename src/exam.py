@@ -29,7 +29,7 @@ class Exam:
         self.config: Dict[str, Any] = config
         """The configuration file of the exam."""
 
-        self.path: str = os.path.join(exports, exam.replace('.yml', '.docx'))
+        self.path: str = os.path.join(exports, exam.replace('.yml', ''))
         """The filepath of the output document."""
 
         self.document: Document = Document()
@@ -51,9 +51,23 @@ class Exam:
         return self.document.styles['Normal']
 
     def save(self):
-        """Processes and exports the final exam in docx format."""
+        """Lints the source file and exports it in yaml and then solve and exports the final exam in docx format."""
         # parse exercises from yaml configuration
         exercises = self._parse_exercises()
+        # lint the yaml source
+        linter = ""
+        for key, value in self.config.items():
+            if key != 'exercises':
+                linter += f"{key}: {value}\n\n"
+        linter += f"exercises:"
+        for x in exercises:
+            yml = x.yaml
+            if yml is None:
+                linter += f"\n  {x.name}: null\n"
+            else:
+                linter += f"\n  {x.name}:\n    " + yml.replace('\n', '\n    ')
+        with open(f'{self.path}.yml', 'w') as file:
+            file.write(linter)
         # write exam text
         title = f"EXAM OF {self.config['exam']}\n{self.config['date']}\nPROF. MICHELA MILANO"
         self.document.add_paragraph(title, style=self.title)
@@ -75,24 +89,24 @@ class Exam:
         """Parses the exercises from the yaml file."""
         output = []
         planning = None  # keep a reference to the planning exercise to be passed to the questions exercise
-        for exercise, kwargs in self.config['exercises'].items():
-            if exercise == 'game':
+        for name, kwargs in self.config['exercises'].items():
+            if name == 'game':
                 assert kwargs is None, "No arguments expected for game exercise"
                 exercise = Game()
-            elif exercise == 'search':
+            elif name == 'search':
                 exercise = Search() if kwargs is None else Search(**kwargs)
-            elif exercise == 'csp':
+            elif name == 'csp':
                 exercise = CSP(**kwargs)
-            elif exercise == 'planning':
+            elif name == 'planning':
                 exercise = Planning(**kwargs)
                 planning = exercise
-            elif exercise == 'questions':
+            elif name == 'questions':
                 exercise = Questions(planning=planning, **kwargs)
-            elif exercise == 'training':
+            elif name == 'training':
                 exercise = Training(**kwargs)
             else:
-                assert kwargs is None, f"No arguments expected for empty dummy exercise named '{exercise}'"
-                exercise = Dummy()
+                assert kwargs is None, f"No arguments expected for empty dummy exercise named '{name}'"
+                exercise = Dummy(name=name)
             output.append(exercise)
         return output
 
@@ -145,4 +159,4 @@ class Exam:
             section.left_margin = Cm(1.27)
             section.right_margin = Cm(1.27)
         # EXPORT
-        self.document.save(self.path)
+        self.document.save(f'{self.path}.docx')

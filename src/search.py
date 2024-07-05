@@ -1,5 +1,6 @@
 from io import BytesIO
-from typing import Dict, List, Tuple
+from string import ascii_uppercase
+from typing import Dict, List, Tuple, Optional
 
 import matplotlib.pyplot as plt
 import networkx as nx
@@ -9,7 +10,6 @@ from docx.enum.text import WD_ALIGN_PARAGRAPH
 from docx.shared import Cm
 
 from src.exercise import Exercise
-from string import ascii_uppercase
 
 COLORS: Dict[str, str] = {
     'source': '#EC604A',
@@ -24,7 +24,7 @@ LETTERS: List[str] = list(ascii_uppercase)
 
 def arc(distance: int) -> float:
     # nodes that are "more distant" from the destination should have more connections
-    probability = 0.8 ** distance
+    probability = 0.85 ** distance
     return np.random.random() >= probability
 
 
@@ -45,7 +45,11 @@ class Search(Exercise):
                  nodes: int | List[str] | Dict[str, float] = 7,
                  arcs: None | List[Tuple[str, str, float]] = None,
                  destination: None | str = None,
-                 source: str = 'A', ):
+                 source: str = 'A',
+                 text_width: float = 16,
+                 sol_width: float = 24,
+                 label_offset: float = 0.13,
+                 heuristic_offset: float = 0.1):
         """A search strategy exercise, defined by graph information."""
 
         # handle nodes
@@ -55,7 +59,7 @@ class Search(Exercise):
             nodes = {n: None for n in nodes}
         # pick destination
         if destination is None:
-            destination = np.random.choice([n for n in nodes if n != source])
+            destination = str(np.random.choice([n for n in nodes if n != source]))
         # handle arcs (i.e., build a graph where each node has a path to the destination)
         #  1. sort nodes from destination to source, with random shuffling for internal nodes
         #  2. iterate over each node
@@ -112,9 +116,33 @@ class Search(Exercise):
                 value = heuristic(distance=path)
             graph.nodes[node]['value'] = value
 
+        self.text_width: float = text_width
+        self.sol_width: float = sol_width
+        self.label_offset: float = label_offset
+        self.heuristic_offset: float = heuristic_offset
         self.source: str = source
         self.destination: str = destination
         self.graph: nx.DiGraph = graph
+
+    @property
+    def name(self) -> str:
+        return 'search'
+
+    @property
+    def yaml(self) -> Optional[str]:
+        output = f"source: {self.source}\n"
+        output += f"destination: {self.destination}\n"
+        output += "nodes:\n"
+        for n, data in self.graph.nodes(data=True):
+            output += f"  {n}: {data['value']}\n"
+        output += "arcs:\n"
+        for s, d, data in self.graph.edges(data=True):
+            output += f"  - [ {s}, {d}, {data['value']} ]\n"
+        output += f"text_width: {self.text_width}\n"
+        output += f"sol_width: {self.sol_width}\n"
+        output += f"label_offset: {self.label_offset}\n"
+        output += f"heuristic_offset: {self.heuristic_offset}\n"
+        return output
 
     def text(self, doc: Document):
         # print text
@@ -126,7 +154,7 @@ class Search(Exercise):
         # draw graph (circular layout with 90° rotation and horizontal mirroring obtained by swapping the coordinates)
         g = self.graph.copy()
         pos = nx.rescale_layout_dict({node: (-j, i) for node, (i, j) in nx.circular_layout(g).items()}, scale=1)
-        fig = plt.figure(figsize=(16, 16), tight_layout=True)
+        fig = plt.figure(figsize=(self.text_width, 16), tight_layout=True)
         nx.draw(
             g,
             pos=pos,
@@ -192,7 +220,7 @@ class Search(Exercise):
                         tree.add_edge(node, new)
                         node = new
             # run bfs to dispose nodes, then draw excluding the dummies
-            f = plt.figure(figsize=(16, 2.5 * levels), tight_layout=True)
+            f = plt.figure(figsize=(self.sol_width, 2.5 * levels), tight_layout=True)
             pos = nx.bfs_layout(tree, start=0, align='horizontal')
             pos = nx.rescale_layout_dict({node: (i, -j) for node, (i, j) in pos.items() if node in nodes}, scale=1)
             tree = tree.subgraph(nodes=nodes.keys())
@@ -213,7 +241,7 @@ class Search(Exercise):
             )
             nx.draw_networkx_labels(
                 tree,
-                pos={node: (i - 0.13, j + 0.02) for node, (i, j) in pos.items()},
+                pos={node: (i - self.label_offset, j + 0.02) for node, (i, j) in pos.items()},
                 labels={node: data['step'] for node, data in nodes.items() if 'step' in data},
                 bbox=dict(facecolor='white', edgecolor='red', boxstyle='square,pad=0.3'),
                 font_size=20,
@@ -222,7 +250,7 @@ class Search(Exercise):
             if heuristically:
                 nx.draw_networkx_labels(
                     tree,
-                    pos={node: (i, j + 0.15) for node, (i, j) in pos.items()},
+                    pos={node: (i, j + self.heuristic_offset) for node, (i, j) in pos.items()},
                     labels={node: data['heuristic'] for node, data in nodes.items()},
                     bbox=dict(facecolor='white', edgecolor='white', boxstyle='round,pad=0.2'),
                     font_size=18,
@@ -260,23 +288,26 @@ class Search(Exercise):
                     output.append(f'{node} (Heuristic = {value}, Path = {float(length)})')
             return output
 
-        def depth_first(tree: nx.DiGraph, step: int = 1, node: int = 0) -> bool:
+        def depth_first(tree: nx.DiGraph, visited: Dict[str, bool], step: int = 1, node: int = 0) -> bool:
             data = tree.nodes[node]
             data['step'] = step
+            visited[data['name']] = True
             # base step (when destination is reached)
             if data['name'] == self.destination:
                 return True
             solution = False
             # open all the successor nodes (to draw them) but explore recursively only if a solution is not found
             for child in self.graph.successors(data['name']):
+                if visited[child]:
+                    continue
                 new = len(list(tree.nodes))
                 tree.add_node(new, name=child, level=data['level'] + 1)
                 tree.add_edge(node, new)
                 if not solution:
-                    solution = depth_first(node=new, step=step + 1, tree=tree)
+                    solution = depth_first(node=new, visited=visited, step=step + 1, tree=tree)
             return solution
 
-        def a_star(tree: nx.DiGraph, step: int = 1, node: int = 0) -> bool:
+        def a_star(tree: nx.DiGraph, visited: Dict[str, bool], step: int = 1, node: int = 0) -> bool:
             data = tree.nodes[node]
             data['step'] = step
             # base step (when destination is reached)
@@ -303,7 +334,7 @@ class Search(Exercise):
                 if 'step' not in data and data['value'] <= value:
                     value = data['value']
                     best = node
-            return a_star(node=best, step=step + 1, tree=tree)
+            return a_star(node=best, visited=visited, step=step + 1, tree=tree)
 
         # depth first
         overestimated = check_heuristic()
@@ -318,7 +349,7 @@ class Search(Exercise):
                 t = nx.DiGraph()
                 val = self.graph.nodes[self.source]['value']
                 t.add_node(0, name=self.source, level=1, cost=0.0, value=val, heuristic=f'f=0.0+{val}={val}')
-                assert fn(tree=t), f"No solution found by {text}"
+                assert fn(tree=t, visited={n: False for n in self.graph.nodes}), f"No solution found by {text}"
                 pth = get_path(t)
                 fig = draw_tree(t, path=pth, heuristically=h)
                 img = BytesIO()

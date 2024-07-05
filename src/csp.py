@@ -156,7 +156,7 @@ class Domain(Variable):
 
     @property
     def domain(self) -> np.ndarray:
-        return np.array(self._domain)
+        return np.array(self._domain, dtype=int)
 
     @domain.setter
     def domain(self, domain: Iterable[int]) -> None:
@@ -167,7 +167,7 @@ class Domain(Variable):
     @abstractmethod
     def original_domain(self) -> np.ndarray:
         """The original domain of the variable."""
-        return np.array(self._original_domain)
+        return np.array(self._original_domain, dtype=int)
 
     def string(self, original: bool = False) -> str:
         """Return a string representation of the variable's domain (or original domain, if original = True)."""
@@ -307,24 +307,24 @@ class CSP(Exercise):
         type will be selected). The 'assign' parameter is used in Full Lookahead only and defines the value to be
         assigned to the first variable (if None, a random value will be selected).
         """
-        self._variables: List[Domain] = [Domain(_domain=dom, name=var, csp=self) for var, dom in variables.items()]
+        self.variables: List[Domain] = [Domain(_domain=dom, name=var, csp=self) for var, dom in variables.items()]
         """The variables involved in the CSP."""
 
-        self._constraints: List[Constraint] = []
+        self.constraints: List[Constraint] = []
         """The constraints involved in the CSP."""
 
-        local = {v.name: v for v in self._variables}
+        local = {v.name: v for v in self.variables}
         for cst in constraints:
             exp = parse_expr(cst, local_dict=local, evaluate=True)
             try:
-                self._constraints.append(exp(self))
+                self.constraints.append(exp(self))
             except AssertionError:
                 raise AssertionError(f"Error with constraint: {cst} "
                                      f"(either the constraint is not binary or it involves undefined variables)")
 
         kind = np.random.choice(['consistency', 'forward', 'lookahead']) if kind is None else kind
         if kind == 'lookahead':
-            assign = np.random.choice(self._variables[0].domain) if assign is None else assign
+            assign = np.random.choice(self.variables[0].domain) if assign is None else assign
         else:
             assign = None
 
@@ -334,13 +334,29 @@ class CSP(Exercise):
         self.assign: Optional[int] = assign
         """The assignment of the first variable in Full Lookahead (or None if a different kind is selected)."""
 
+    @property
+    def name(self) -> str:
+        return 'csp'
+
+    @property
+    def yaml(self) -> Optional[str]:
+        output = "variables:\n"
+        for v in self.variables:
+            output += f"  {v.name}: [ {', '.join([str(val) for val in v.original_domain])} ]\n"
+        output += "constraints:\n"
+        for c in self.constraints:
+            output += f"  - {c}\n"
+        output += f"kind: {self.kind}\n"
+        output += f"assign: {self.assign}\n"
+        return output
+
     def text(self, doc: Document):
         doc.add_paragraph('Given the following CSP:')
         doc.add_paragraph()
-        for var in self._variables:
+        for var in self.variables:
             doc.add_paragraph(f'{var}::{var.string(original=True)}')
         doc.add_paragraph()
-        for cst in self._constraints:
+        for cst in self.constraints:
             doc.add_paragraph(f'{cst}')
         doc.add_paragraph()
         if self.kind == 'consistency':
@@ -350,7 +366,7 @@ class CSP(Exercise):
             p.add_run('using alphabetical order of variables and lexicographic order of values.')
         elif self.kind == 'lookahead':
             p = doc.add_paragraph('Apply Full Lookahead to the CSP, and show the domains of the variables when ')
-            p.add_run(f'{self._variables[0]}').bold = True
+            p.add_run(f'{self.variables[0]}').bold = True
             p.add_run(' is instantiated to ')
             p.add_run(f'{self.assign}').bold = True
             p.add_run(' (consider the variables according to the numerical order).')
@@ -384,7 +400,7 @@ class CSP(Exercise):
             p.add_run(':').italic = True
             doc.add_paragraph()
             # iterate over all the constraints
-            for i, cst in enumerate(self._constraints):
+            for i, cst in enumerate(self.constraints):
                 # log the constraint and apply the domain reduction
                 p = doc.add_paragraph(f'Apply ({ascii_lowercase[i]}) - ')
                 p.add_run(cst.name).bold = True
@@ -418,7 +434,7 @@ class CSP(Exercise):
                 else:
                     finished = False
                     doc.add_paragraph(f'New domains:')
-                    for var in self._variables:
+                    for var in self.variables:
                         doc.add_paragraph(f'{var}::{var.string()}')
                     doc.add_paragraph()
             # increase iteration
@@ -436,7 +452,7 @@ class CSP(Exercise):
             r.italic = True
         else:
             p0.insert_paragraph_before('By applying arc-consistency, the variables domains are reduced as follows:')
-            for var in self._variables:
+            for var in self.variables:
                 p0.insert_paragraph_before(f'{var}::{var.string()}')
             p0.insert_paragraph_before()
             p = p0.insert_paragraph_before()
@@ -445,11 +461,11 @@ class CSP(Exercise):
             r.italic = True
             p0.insert_paragraph_before()
             p0.insert_paragraph_before('We start with the following domains:')
-            for var in self._variables:
+            for var in self.variables:
                 p0.insert_paragraph_before(f'{var}::{var.string(original=True)}')
             p0.insert_paragraph_before()
             p0.insert_paragraph_before('And with the following set of constraints:')
-            for cst in self._constraints:
+            for cst in self.constraints:
                 p0.insert_paragraph_before(f'{cst}')
 
     def _forward(self, doc: Document):
@@ -459,15 +475,15 @@ class CSP(Exercise):
         # recursively try to find solution by checking variables' domains iteratively
         def solve(idx: int, domains: List[np.ndarray]) -> bool:
             # if we arrive to the point where there are no more variables left, then the problem is solver
-            if idx == len(self._variables):
+            if idx == len(self.variables):
                 return True
             # otherwise, retrive the variable and iterate over its current domain
-            variable = self._variables[idx]
+            variable = self.variables[idx]
             for value in domains[idx]:
                 # assign the current value as new domain and iterate through the constraints
                 fail = False
                 variable.domain = [value]
-                for cst in self._constraints:
+                for cst in self.constraints:
                     # when the variable appears in the constraint, perform the reduction and check for feasibility
                     if cst.var1.name == variable.name or cst.var2.name == variable.name:
                         cst.reduce()
@@ -483,7 +499,7 @@ class CSP(Exercise):
                 #   - FAIL if the variable failed
                 #   - domain if the variable did not fail
                 #   - '///' if the variable comes after one who failed
-                for i, var in enumerate(self._variables):
+                for i, var in enumerate(self.variables):
                     if i < idx:
                         row.append(f'{var} = {domains[i][0]}')
                     elif i == idx:
@@ -497,26 +513,26 @@ class CSP(Exercise):
                         row.append(var.string())
                 rows.append(row)
                 # in case of the procedure did not fail and the problem can be solved, return true
-                if not fail and solve(idx=idx + 1, domains=[var.domain.copy() for var in self._variables]):
+                if not fail and solve(idx=idx + 1, domains=[var.domain.copy() for var in self.variables]):
                     return True
                 # otherwise, restore the initial domains
-                for i, var in enumerate(self._variables):
+                for i, var in enumerate(self.variables):
                     var.domain = domains[i]
             return False
 
         # start to solve from the first variable
-        solved = solve(idx=0, domains=[v.domain.copy() for v in self._variables])
+        solved = solve(idx=0, domains=[v.domain.copy() for v in self.variables])
         # log the initial information
-        for v in self._variables:
+        for v in self.variables:
             doc.add_paragraph(f'{v}::{v.string(original=True)}')
         doc.add_paragraph()
-        for c in self._constraints:
+        for c in self.constraints:
             doc.add_paragraph(f'{c}')
         doc.add_paragraph()
-        table = doc.add_table(1, len(self._variables) + 1)
+        table = doc.add_table(1, len(self.variables) + 1)
         table.rows[0].height = Cm(0.65)
         cells = table.rows[0].cells
-        for n, v in enumerate(self._variables):
+        for n, v in enumerate(self.variables):
             cells[n + 1].text = v.name
             cells[n + 1].paragraphs[0].runs[0].font.bold = True
         for cells in rows:
@@ -537,16 +553,16 @@ class CSP(Exercise):
     def _lookahead(self, doc: Document):
         """Performs full look-ahead on the CSP and prints the results."""
         # assigns the value to the new domain
-        var = self._variables[0]
+        var = self.variables[0]
         assert self.assign in var.domain, f"Domain of {var} is {var.domain}, trying to assign value {self.assign}"
-        self._variables[0].domain = [self.assign]
+        self.variables[0].domain = [self.assign]
         # print the initial text
         doc.add_paragraph('We start from the CSP:')
         doc.add_paragraph()
-        for v in self._variables:
+        for v in self.variables:
             doc.add_paragraph(f'{v}::{var.string(original=True)}')
         doc.add_paragraph()
-        for c in self._constraints:
+        for c in self.constraints:
             doc.add_paragraph(f'{c}')
         doc.add_paragraph()
         p = doc.add_paragraph()
@@ -560,7 +576,7 @@ class CSP(Exercise):
         doc.add_paragraph()
         # order the constraints depending on whether the assigned variable appears or not
         constraints = {'var': [], 'other': []}
-        for cst in self._constraints.copy():
+        for cst in self.constraints.copy():
             key = 'var' if (cst.var1.name == var.name or cst.var2.name == var.name) else 'other'
             constraints[key].append(cst)
         # iterate over the constraints while keeping track of feasibility
@@ -582,7 +598,7 @@ class CSP(Exercise):
         if feasible:
             p.add_run('The final domains are:').italic = True
             doc.add_paragraph(f' {var} = {self.assign}')
-            for var in self._variables[1:]:
+            for var in self.variables[1:]:
                 doc.add_paragraph(f' {var}::{var.string()}')
         else:
             p = doc.add_paragraph()

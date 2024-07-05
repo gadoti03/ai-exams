@@ -53,6 +53,16 @@ class Questions(Exercise):
         self.kowalski: Optional[str] = kowalski
         self.exam: str = exam
 
+    @property
+    def name(self) -> str:
+        return 'questions'
+
+    @property
+    def yaml(self) -> Optional[str]:
+        output = f"exam: {self.exam}\n"
+        output += f"kowalski: {'null' if self.kowalski is None else self.kowalski}\n"
+        return output
+
     def text(self, doc: Document):
         if self.exam == 'faikr':
             p = doc.add_paragraph(' 1)  Model the action ')

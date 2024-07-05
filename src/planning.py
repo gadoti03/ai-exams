@@ -1,7 +1,7 @@
 import itertools
 from dataclasses import dataclass, field
 from io import BytesIO
-from typing import Dict, List, Literal, Tuple, Any, Set
+from typing import Dict, List, Literal, Tuple, Any, Set, Optional
 
 import matplotlib.pyplot as plt
 import networkx as nx
@@ -101,7 +101,11 @@ class Action:
 
 
 class Planning(Exercise):
-    def __init__(self, init: List[List[str]], goal: List[List[str]], **actions: Dict[str, ActionType]):
+    def __init__(self,
+                 init: List[List[str]],
+                 goal: List[List[str]],
+                 graph_width: float = 21,
+                 **actions: Dict[str, ActionType]):
         """A planning exercise defined by initial state, goal, and a set of actions."""
 
         act = {}
@@ -123,6 +127,38 @@ class Planning(Exercise):
 
         self.actions: Dict[str, Action] = act
         """The actions involved in the planning problem."""
+
+        self.graph_width: float = graph_width
+        """The width of the graphplan solution image."""
+
+    @property
+    def name(self) -> str:
+        return 'planning'
+
+    @property
+    def yaml(self) -> Optional[str]:
+        output = "init:\n"
+        for proposition in self.init:
+            output += f"  - [ " + ", ".join([proposition.name] + [param for param in proposition.params]) + " ]\n"
+        output += "\ngoal:\n"
+        for proposition in self.goal:
+            output += f"  - [ " + ", ".join([proposition.name] + [param for param in proposition.params]) + " ]\n"
+        for name, action in self.actions.items():
+            output += f"\n{name}:\n"
+            output += "  variables:\n"
+            for variable, values in action.variables.items():
+                output += f"    {variable}: [ {', '.join(values)} ]\n"
+            output += "  precond:\n"
+            for proposition in action.precond:
+                output += f"    - [ " + ", ".join([proposition.name] + [param for param in proposition.params]) + " ]\n"
+            output += "  delete:\n"
+            for proposition in action.delete:
+                output += f"    - [ " + ", ".join([proposition.name] + [param for param in proposition.params]) + " ]\n"
+            output += "  add:\n"
+            for proposition in action.add:
+                output += f"    - [ " + ", ".join([proposition.name] + [param for param in proposition.params]) + " ]\n"
+        output += f"\ngraph_width: {self.graph_width}\n"
+        return output
 
     def text(self, doc: Document):
         doc.add_paragraph('Given the following initial state:')
@@ -201,7 +237,7 @@ class Planning(Exercise):
             g.nodes[node]['label'] = node[0]
             g.nodes[node]['level'] = node[1]
         pos = nx.multipartite_layout(g, subset_key='level')
-        fig = plt.figure(figsize=(21, 9), tight_layout=True)
+        fig = plt.figure(figsize=(self.graph_width, 9), tight_layout=True)
         nx.draw_networkx_nodes(g, pos=pos, ax=fig.gca())
         nx.draw_networkx_labels(
             g,

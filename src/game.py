@@ -1,5 +1,5 @@
 from io import BytesIO
-from typing import Tuple, Dict, Any
+from typing import Tuple, Dict, Any, Optional, Iterable
 
 import matplotlib.pyplot as plt
 import networkx as nx
@@ -43,6 +43,14 @@ class Game(Exercise):
     )
     """Defines the color of the node based on its kind."""
 
+    @property
+    def name(self) -> str:
+        return 'game'
+
+    @property
+    def yaml(self) -> dict:
+        return f"values: [ {', '.join([str(v) for v in self.values])} ]\n"
+
     def text(self, doc: Document):
         p = doc.add_paragraph('Consider the following game tree where the first player is ')
         p.add_run('MAX').italic = True
@@ -66,9 +74,13 @@ class Game(Exercise):
             doc.paragraphs[-1].alignment = WD_ALIGN_PARAGRAPH.CENTER
             img.close()
 
-    def __init__(self):
+    def __init__(self, values: Optional[Iterable[int]] = None):
         """Creates the minmax tree using a nx.DiGraph structure where the leaf nodes have the given values."""
-        values = np.random.randint(low=-99, high=100, size=16)
+        if values is None:
+            values = np.random.randint(low=-99, high=100, size=16)
+        else:
+            values = np.array(values)
+            assert len(values) == 16, f"Expected 16 integer values, got {len(values)}"
         self._tree: nx.DiGraph = nx.balanced_tree(r=2, h=Game.HEIGHT, create_using=nx.DiGraph)
         for height in range(Game.HEIGHT + 1):
             for element in range(2 ** height):

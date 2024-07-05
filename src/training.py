@@ -47,6 +47,17 @@ class Training(Exercise):
     ALIASES: Dict[Any, str] = {np.nan: '?', True: 'yes', False: 'no'}
     """The label aliases for output outcomes and nan values."""
 
+    @property
+    def name(self) -> str:
+        return 'training'
+
+    @property
+    def yaml(self) -> Optional[str]:
+        output = f"output: {self._output.name}\n"
+        for col in self._inputs.columns:
+            output += f"{col}: [ {', '.join(self._inputs[col].dropna().unique())} ]\n"
+        return output
+
     def text(self, doc: Document):
         doc.add_paragraph('Given the following training set:')
         doc.add_paragraph()

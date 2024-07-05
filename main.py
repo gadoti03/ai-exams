@@ -23,5 +23,4 @@ args = parser.parse_args()
 
 # ITERATE THROUGH ALL THE INPUT SOURCES
 for file in os.listdir(args.sources):
-    exam = Exam(sources=args.sources, exports=args.exports, exam=file)
-    exam.save()
+    Exam(sources=args.sources, exports=args.exports, exam=file).save()
