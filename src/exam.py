@@ -50,24 +50,25 @@ class Exam:
         """The style of the exercise text."""
         return self.document.styles['Normal']
 
-    def save(self):
+    def save(self, lint: bool):
         """Lints the source file and exports it in yaml and then solve and exports the final exam in docx format."""
         # parse exercises from yaml configuration
         exercises = self._parse_exercises()
         # lint the yaml source
-        linter = ""
-        for key, value in self.config.items():
-            if key != 'exercises':
-                linter += f"{key}: {value}\n\n"
-        linter += f"exercises:"
-        for x in exercises:
-            yml = x.yaml
-            if yml is None:
-                linter += f"\n  {x.name}: null\n"
-            else:
-                linter += f"\n  {x.name}:\n    " + yml.replace('\n', '\n    ')
-        with open(f'{self.path}.yml', 'w') as file:
-            file.write(linter)
+        if lint:
+            linter = ""
+            for key, value in self.config.items():
+                if key != 'exercises':
+                    linter += f"{key}: {value}\n\n"
+            linter += f"exercises:"
+            for x in exercises:
+                yml = x.yaml
+                if yml is None:
+                    linter += f"\n  {x.name}: null\n"
+                else:
+                    linter += f"\n  {x.name}:\n    " + yml.replace('\n', '\n    ')
+            with open(f'{self.path}.yml', 'w') as file:
+                file.write(linter)
         # write exam text
         title = f"EXAM OF {self.config['exam']}\n{self.config['date']}\nPROF. MICHELA MILANO"
         self.document.add_paragraph(title, style=self.title)
