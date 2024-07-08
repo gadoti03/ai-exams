@@ -14,7 +14,7 @@ exercises:
   #  - [nodes]: dictionary of node IDs mapped to their heuristic value [default: random initialization]
   #  - [arcs]: list of triplets >sourceID, destinationID, weight> [default: random initialization]
   #  - [graph_ratio]: the ratio of the input graph figure [default: 1]
-  #  - [level_ratio]: the (per-level) ratio of the output solution figure [default: 1]
+  #  - [level_ratio]: the (per-level) ratio of the output solution figure [default: 7]
   #  - [label_offset]: the label offset of the output solution figure [default: 0.13]
   #  - [heuristic_offset]: the heuristic offset of the output solution figure [default: 0.1]
   search:
@@ -71,7 +71,7 @@ exercises:
   #       * precond -> list of propositions necessary for the precondition
   #       * delete -> list of propositions in the delete list
   #       * add -> list of propositions in the add list
-  #  - [graph_ratio]: the width of the graphplan solution image [default: 21]
+  #  - [graph_ratio]: the width of the graphplan solution image [default: 3]
   planning:
     init:
       - [ has_slides, ml ]
