@@ -92,19 +92,20 @@ class Exam:
         planning = None  # keep a reference to the planning exercise to be passed to the questions exercise
         for name, kwargs in self.config['exercises'].items():
             if name == 'game':
-                assert kwargs is None, "No arguments expected for game exercise"
-                exercise = Game()
+                exercise = Game() if kwargs is None else Game(**kwargs)
             elif name == 'search':
                 exercise = Search() if kwargs is None else Search(**kwargs)
             elif name == 'csp':
-                exercise = CSP(**kwargs)
+                exercise = Dummy(name='csp') if kwargs is None else CSP(**kwargs)
             elif name == 'planning':
-                exercise = Planning(**kwargs)
-                planning = exercise
+                if kwargs is None:
+                    exercise = Dummy(name='planning')
+                else:
+                    exercise = planning = Planning(**kwargs)
             elif name == 'questions':
-                exercise = Questions(planning=planning, **kwargs)
+                exercise = Dummy(name='questions') if kwargs is None else Questions(planning=planning, **kwargs)
             elif name == 'training':
-                exercise = Training(**kwargs)
+                exercise = Dummy(name='training') if kwargs is None else Training(**kwargs)
             else:
                 assert kwargs is None, f"No arguments expected for empty dummy exercise named '{name}'"
                 exercise = Dummy(name=name)

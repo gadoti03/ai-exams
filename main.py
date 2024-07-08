@@ -30,4 +30,5 @@ args = parser.parse_args()
 os.makedirs(args.sources, exist_ok=True)
 os.makedirs(args.exports, exist_ok=True)
 for file in os.listdir(args.sources):
-    Exam(sources=args.sources, exports=args.exports, exam=file).save(lint=not args.no_lint)
+    if file.endswith('.yml') or file.endswith('.yaml'):
+        Exam(sources=args.sources, exports=args.exports, exam=file).save(lint=not args.no_lint)

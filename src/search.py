@@ -46,8 +46,8 @@ class Search(Exercise):
                  arcs: None | List[Tuple[str, str, float]] = None,
                  destination: None | str = None,
                  source: str = 'A',
-                 text_width: float = 16,
-                 sol_width: float = 24,
+                 graph_ratio: float = 1,
+                 level_ratio: float = 7,
                  label_offset: float = 0.13,
                  heuristic_offset: float = 0.1):
         """A search strategy exercise, defined by graph information."""
@@ -116,8 +116,8 @@ class Search(Exercise):
                 value = heuristic(distance=path)
             graph.nodes[node]['value'] = value
 
-        self.text_width: float = text_width
-        self.sol_width: float = sol_width
+        self.graph_ratio: float = graph_ratio
+        self.level_ratio: float = level_ratio
         self.label_offset: float = label_offset
         self.heuristic_offset: float = heuristic_offset
         self.source: str = source
@@ -138,8 +138,8 @@ class Search(Exercise):
         output += "arcs:\n"
         for s, d, data in self.graph.edges(data=True):
             output += f"  - [ {s}, {d}, {data['value']} ]\n"
-        output += f"text_width: {self.text_width}\n"
-        output += f"sol_width: {self.sol_width}\n"
+        output += f"graph_ratio: {self.graph_ratio}\n"
+        output += f"level_ratio: {self.level_ratio}\n"
         output += f"label_offset: {self.label_offset}\n"
         output += f"heuristic_offset: {self.heuristic_offset}\n"
         return output
@@ -154,7 +154,7 @@ class Search(Exercise):
         # draw graph (circular layout with 90° rotation and horizontal mirroring obtained by swapping the coordinates)
         g = self.graph.copy()
         pos = nx.rescale_layout_dict({node: (-j, i) for node, (i, j) in nx.circular_layout(g).items()}, scale=1)
-        fig = plt.figure(figsize=(self.text_width, 16), tight_layout=True)
+        fig = plt.figure(figsize=(16, 16 / self.graph_ratio), tight_layout=True)
         nx.draw(
             g,
             pos=pos,
@@ -220,14 +220,15 @@ class Search(Exercise):
                         tree.add_edge(node, new)
                         node = new
             # run bfs to dispose nodes, then draw excluding the dummies
-            f = plt.figure(figsize=(self.sol_width, 2.5 * levels), tight_layout=True)
+            f, ax = plt.subplots(1, 1, figsize=(16, 16 * levels / self.level_ratio), tight_layout=True)
+            ax.margins(y=0.03 * levels, tight=True)
             pos = nx.bfs_layout(tree, start=0, align='horizontal')
             pos = nx.rescale_layout_dict({node: (i, -j) for node, (i, j) in pos.items() if node in nodes}, scale=1)
             tree = tree.subgraph(nodes=nodes.keys())
             nx.draw(
                 tree,
                 pos=pos,
-                node_size=10000,
+                node_size=8000,
                 node_color=[COLORS['path' if node in path else 'explored'] for node in tree.nodes],
                 linewidths=3,
                 edgecolors='w',
@@ -237,7 +238,7 @@ class Search(Exercise):
                 font_weight='bold',
                 width=3,
                 arrows=False,
-                ax=f.gca()
+                ax=ax
             )
             nx.draw_networkx_labels(
                 tree,
@@ -245,7 +246,7 @@ class Search(Exercise):
                 labels={node: data['step'] for node, data in nodes.items() if 'step' in data},
                 bbox=dict(facecolor='white', edgecolor='red', boxstyle='square,pad=0.3'),
                 font_size=20,
-                ax=f.gca()
+                ax=ax
             )
             if heuristically:
                 nx.draw_networkx_labels(
@@ -254,7 +255,7 @@ class Search(Exercise):
                     labels={node: data['heuristic'] for node, data in nodes.items()},
                     bbox=dict(facecolor='white', edgecolor='white', boxstyle='round,pad=0.2'),
                     font_size=18,
-                    ax=f.gca()
+                    ax=ax
                 )
             return f
 
@@ -354,7 +355,7 @@ class Search(Exercise):
                 fig = draw_tree(t, path=pth, heuristically=h)
                 img = BytesIO()
                 fig.savefig(img, bbox_inches='tight', pad_inches=0)
-                doc.add_picture(img, width=Cm(12.5))
+                doc.add_picture(img, width=Cm(13.5))
                 doc.paragraphs[-1].alignment = WD_ALIGN_PARAGRAPH.CENTER
                 img.close()
                 pth = [t.nodes[key]['name'] for key in pth]

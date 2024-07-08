@@ -347,7 +347,8 @@ class CSP(Exercise):
         for c in self.constraints:
             output += f"  - {c}\n"
         output += f"kind: {self.kind}\n"
-        output += f"assign: {self.assign}\n"
+        if self.assign is not None:
+            output += f"assign: {self.assign}\n"
         return output
 
     def text(self, doc: Document):
@@ -560,7 +561,7 @@ class CSP(Exercise):
         doc.add_paragraph('We start from the CSP:')
         doc.add_paragraph()
         for v in self.variables:
-            doc.add_paragraph(f'{v}::{var.string(original=True)}')
+            doc.add_paragraph(f'{v}::{v.string(original=True)}')
         doc.add_paragraph()
         for c in self.constraints:
             doc.add_paragraph(f'{c}')

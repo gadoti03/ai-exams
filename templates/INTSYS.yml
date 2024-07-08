@@ -22,7 +22,7 @@ exercises:
   #       * precond -> list of propositions necessary for the precondition
   #       * delete -> list of propositions in the delete list
   #       * add -> list of propositions in the add list
-  #  - [graph_width]: the width of the graphplan solution image [default: 21]
+  #  - [graph_ratio]: the width of the graphplan solution image [default: 21]
   planning:
     init:
       - [ has_slides, ml ]

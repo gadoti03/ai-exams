@@ -104,7 +104,7 @@ class Planning(Exercise):
     def __init__(self,
                  init: List[List[str]],
                  goal: List[List[str]],
-                 graph_width: float = 21,
+                 graph_ratio: float = 3,
                  **actions: Dict[str, ActionType]):
         """A planning exercise defined by initial state, goal, and a set of actions."""
 
@@ -128,7 +128,7 @@ class Planning(Exercise):
         self.actions: Dict[str, Action] = act
         """The actions involved in the planning problem."""
 
-        self.graph_width: float = graph_width
+        self.graph_ratio: float = graph_ratio
         """The width of the graphplan solution image."""
 
     @property
@@ -157,7 +157,7 @@ class Planning(Exercise):
             output += "  add:\n"
             for proposition in action.add:
                 output += f"    - [ " + ", ".join([proposition.name] + [param for param in proposition.params]) + " ]\n"
-        output += f"\ngraph_width: {self.graph_width}\n"
+        output += f"\ngraph_ratio: {self.graph_ratio}\n"
         return output
 
     def text(self, doc: Document):
@@ -237,7 +237,7 @@ class Planning(Exercise):
             g.nodes[node]['label'] = node[0]
             g.nodes[node]['level'] = node[1]
         pos = nx.multipartite_layout(g, subset_key='level')
-        fig = plt.figure(figsize=(self.graph_width, 9), tight_layout=True)
+        fig = plt.figure(figsize=(21, 21 / self.graph_ratio), tight_layout=True)
         nx.draw_networkx_nodes(g, pos=pos, ax=fig.gca())
         nx.draw_networkx_labels(
             g,
