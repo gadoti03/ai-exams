@@ -1,10 +1,11 @@
 import argparse
 import os
+import re
 
 from src.exam import Exam
 
 # PARSE SCRIPT ARGUMENTS
-parser = argparse.ArgumentParser(description='Test multiple HGR metrics on multiple datasets')
+parser = argparse.ArgumentParser()
 parser.add_argument(
     '-s',
     '--sources',
@@ -20,9 +21,9 @@ parser.add_argument(
     help='the path where to store the exported files'
 )
 parser.add_argument(
-    '--no-lint',
+    '--lint',
     action='store_true',
-    help='does not export the linted source files in .yml'
+    help='exports the linted source files in .yml'
 )
 args = parser.parse_args()
 
@@ -30,5 +31,5 @@ args = parser.parse_args()
 os.makedirs(args.sources, exist_ok=True)
 os.makedirs(args.exports, exist_ok=True)
 for file in os.listdir(args.sources):
-    if file.endswith('.yml') or file.endswith('.yaml'):
-        Exam(sources=args.sources, exports=args.exports, exam=file).save(lint=not args.no_lint)
+    if re.search(r'\.ya?ml$', file):
+        Exam(sources=args.sources, exports=args.exports, exam=file).save(lint=args.lint)

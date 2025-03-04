@@ -1,4 +1,5 @@
 import os
+import re
 from typing import Dict, List, Any
 
 import yaml
@@ -29,7 +30,7 @@ class Exam:
         self.config: Dict[str, Any] = config
         """The configuration file of the exam."""
 
-        self.path: str = os.path.join(exports, exam.replace('.yml', ''))
+        self.path: str = os.path.join(exports, re.sub(r'\.ya?ml$', '', exam))
         """The filepath of the output document."""
 
         self.document: Document = Document()
