@@ -1,6 +1,6 @@
 from io import BytesIO
 from string import ascii_uppercase
-from typing import Dict, List, Tuple, Optional
+from typing import Dict, List, Tuple, Optional,TypedDict
 
 import matplotlib.pyplot as plt
 import networkx as nx
@@ -8,6 +8,8 @@ import numpy as np
 from docx import Document
 from docx.enum.text import WD_ALIGN_PARAGRAPH
 from docx.shared import Cm
+
+import sys, os
 
 from src.exercise import Exercise
 
@@ -27,7 +29,6 @@ def arc(distance: int) -> float:
     probability = 0.85 ** distance
     return np.random.random() >= probability
 
-
 def weight(distance: int) -> int:
     # nodes that are "more distant" between each other should have higher weights
     rnd = np.random.random_integers(8)
@@ -39,13 +40,22 @@ def heuristic(distance: int) -> int:
     rnd = np.random.normal(loc=4, scale=3)
     return int(np.clip(rnd, a_min=1, a_max=distance))
 
+class ExpansionNode(TypedDict):
+    name: str
+    value: float  # o int, dipende dai tuoi dati
+
+class Expansion(TypedDict):
+    name: str
+    nodes: List[ExpansionNode]
 
 class Search(Exercise):
     def __init__(self,
                  nodes: int | List[str] | Dict[str, float] = 7,
                  arcs: None | List[Tuple[str, str, float]] = None,
+                 ords: None | Dict[str, float] = None,
                  destination: None | str = None,
                  source: str = 'A',
+                 tiebreaker: str = None,
                  graph_ratio: float = 1,
                  level_ratio: float = 7,
                  label_offset: float = 0.13,
@@ -57,6 +67,15 @@ class Search(Exercise):
             nodes = {n: None for n in LETTERS[:nodes]}
         elif isinstance(nodes, list):
             nodes = {n: None for n in nodes}
+        
+        if ords is not None:
+            try:
+                self.ords = {k: float(v) for k, v in ords.items()}
+            except (ValueError, TypeError):
+                raise ValueError("ords deve contenere solo valori numerici convertibili in float")
+        else:
+            self.ords = None
+
         # pick destination
         if destination is None:
             destination = str(np.random.choice([n for n in nodes if n != source]))
@@ -87,6 +106,7 @@ class Search(Exercise):
                         value = weight(distance=j + 1)
                         arcs.append((s, d, float(value)))
                         connected[s] = True
+        
 
         # build graph
         graph = nx.DiGraph()
@@ -116,6 +136,7 @@ class Search(Exercise):
                 value = heuristic(distance=path)
             graph.nodes[node]['value'] = value
 
+        self.tiebreaker: str = tiebreaker
         self.graph_ratio: float = graph_ratio
         self.level_ratio: float = level_ratio
         self.label_offset: float = label_offset
@@ -188,11 +209,27 @@ class Search(Exercise):
             font_size=22,
             ax=fig.gca()
         )
+
         img = BytesIO()
         fig.savefig(img, bbox_inches='tight', pad_inches=0)
         doc.add_picture(img, width=Cm(10))
         doc.paragraphs[-1].alignment = WD_ALIGN_PARAGRAPH.CENTER
+        
+        '''
+        # GENERATE IMAGES FOR TASK 3
+        # Save to disk with a unique name
+        import time
+
+        timestamp = int(time.time())
+        filename = f'graph_{timestamp}.png'
+
+        img.seek(0)
+        with open(filename, 'wb') as f:
+            f.write(img.getbuffer())
+        '''
+
         img.close()
+
         # print questions
         doc.add_paragraph()
         doc.add_paragraph('a)  Apply the depth-first search (do not consider the costs of the nodes), and draw the '
@@ -289,57 +326,9 @@ class Search(Exercise):
                     output.append(f'{node} (Heuristic = {value}, Path = {float(length)})')
             return output
 
-        def depth_first(tree: nx.DiGraph, visited: Dict[str, bool], step: int = 1, node: int = 0) -> bool:
-            data = tree.nodes[node]
-            data['step'] = step
-            visited[data['name']] = True
-            # base step (when destination is reached)
-            if data['name'] == self.destination:
-                return True
-            solution = False
-            # open all the successor nodes (to draw them) but explore recursively only if a solution is not found
-            for child in self.graph.successors(data['name']):
-                if visited[child]:
-                    continue
-                new = len(list(tree.nodes))
-                tree.add_node(new, name=child, level=data['level'] + 1)
-                tree.add_edge(node, new)
-                if not solution:
-                    solution = depth_first(node=new, visited=visited, step=step + 1, tree=tree)
-            return solution
-
-        def a_star(tree: nx.DiGraph, visited: Dict[str, bool], step: int = 1, node: int = 0) -> bool:
-            data = tree.nodes[node]
-            data['step'] = step
-            # base step (when destination is reached)
-            if data['name'] == self.destination:
-                return True
-            # open all the successor nodes and compute their cost
-            for child in self.graph.successors(data['name']):
-                new = len(list(tree.nodes))
-                value = self.graph.nodes[child]['value']
-                cost = data['cost'] + self.graph.edges[(data['name'], child)]['value']
-                tree.add_node(
-                    new,
-                    name=child,
-                    level=data['level'] + 1,
-                    cost=cost,
-                    value=cost + value,
-                    heuristic=f'f={cost}+{value}={cost + value}'
-                )
-                tree.add_edge(node, new)
-            # select and open the unexplored node with the least function value
-            best = None
-            value = 1000
-            for node, data in tree.nodes(data=True):
-                if 'step' not in data and data['value'] <= value:
-                    value = data['value']
-                    best = node
-            return a_star(node=best, visited=visited, step=step + 1, tree=tree)
-
         # depth first
         overestimated = check_heuristic()
-        for text, fn, h in [('Depth-first search', depth_first, False), ('A*', a_star, True)]:
+        for text, fn, h in [('Depth-first search', self.depth_first, False), ('A*', self.a_star, True)]:
             doc.add_paragraph(f'a) {text}')
             doc.add_paragraph()
             if h and len(overestimated) > 0:
@@ -350,7 +339,8 @@ class Search(Exercise):
                 t = nx.DiGraph()
                 val = self.graph.nodes[self.source]['value']
                 t.add_node(0, name=self.source, level=1, cost=0.0, value=val, heuristic=f'f=0.0+{val}={val}')
-                assert fn(tree=t, visited={n: False for n in self.graph.nodes}), f"No solution found by {text}"
+                result_bool, result_int = fn(tree=t, visited={n: False for n in self.graph.nodes})
+                assert result_bool, f"No solution found by {text}"  # Usa il bool per verificare se la soluzione è stata trovata
                 pth = get_path(t)
                 fig = draw_tree(t, path=pth, heuristically=h)
                 img = BytesIO()
@@ -365,3 +355,66 @@ class Search(Exercise):
                 doc.add_paragraph(f'The produced solution is {pth} with cost {cst}')
                 if text != 'A*':
                     doc.add_paragraph()
+
+    def depth_first(self, tree: nx.DiGraph, visited: Dict[str, bool], step: int = 1, node: int = 0) -> tuple[bool, int]:
+        data = tree.nodes[node]
+        data['step'] = step
+        visited[data['name']] = True
+        # base step (when destination is reached)
+        if data['name'] == self.destination:
+            return True, step
+        solution = False
+        # open all the successor nodes (to draw them) but explore recursively only if a solution is not found
+        for child in self.graph.successors(data['name']):
+            if visited[child]:
+                continue
+            new = len(list(tree.nodes))
+            tree.add_node(new, name=child, level=data['level'] + 1)
+            tree.add_edge(node, new)
+            if not solution:
+                solution = self.depth_first(node=new, visited=visited, step=step + 1, tree=tree)
+        return solution
+
+    def a_star(self, tree: nx.DiGraph, visited: Dict[str, bool], step: int = 1, node: int = 0) -> tuple[bool, int]:
+        data = tree.nodes[node]
+        data['step'] = step
+        # base step (when destination is reached)
+        if data['name'] == self.destination:
+            return True, step
+        # open all the successor nodes and compute their cost
+        for child in self.graph.successors(data['name']):
+            new = len(list(tree.nodes))
+            value = self.graph.nodes[child]['value']
+            cost = data['cost'] + self.graph.edges[(data['name'], child)]['value']
+            tree.add_node(
+                new,
+                name=child,
+                level=data['level'] + 1,
+                cost=cost,
+                value=cost + value,
+                heuristic=f'f={cost}+{value}={cost + value}'
+            )
+            tree.add_edge(node, new)
+        # select and open the unexplored node with the least function value
+        best = None
+        value = None
+        name = None
+
+        for node, data in tree.nodes(data=True):
+            if 'step' not in data:
+                if value is None or data['value'] < value:
+                    value = data['value']
+                    best = node
+                    name = data['name']
+                if data['value'] == value:
+                    # alphabetical order
+                    if self.tiebreaker=='alphabetical order' and data['name'] < name:
+                        value = data['value']
+                        best = node
+                        name = data['name']
+                    # order of nodes
+                    if self.tiebreaker=='order of nodes' and self.ords[data['name']] < self.ords[name]:
+                        value = data['value']
+                        best = node
+                        name = data['name']
+        return self.a_star(node=best, visited=visited, step=step + 1, tree=tree)

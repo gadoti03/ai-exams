@@ -50,10 +50,6 @@ class Exam:
     def text(self) -> ParagraphStyle:
         """The style of the exercise text."""
         return self.document.styles['Normal']
-    
-    def check_expansions_A_star(self):
-        search_data = self.config['exercises']['search']
-        exercise = Search() if search_data is None else Search(**search_data)
 
     def save(self, lint: bool):
         """Lints the source file and exports it in yaml and then solve and exports the final exam in docx format."""

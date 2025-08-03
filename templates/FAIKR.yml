@@ -16,6 +16,9 @@ exercises:
   #  - [level_ratio]: the width of the output solution figure [default: 7]
   #  - [label_offset]: the label offset of the output solution figure [default: 0.13]
   #  - [heuristic_offset]: the heuristic offset of the output solution figure [default: 0.1]
+
+
+  # <span style='margin-bottom: 0px;'>(lasciare vuoto se non è previsto il percorso)</span>
   search: null
 
   # csp exercise:

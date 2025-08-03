@@ -1,0 +1,271 @@
+from io import BytesIO
+from typing import Tuple, Dict, Any, Optional, Iterable
+
+import matplotlib.pyplot as plt
+import networkx as nx
+import numpy as np
+from docx import Document
+from docx.enum.text import WD_ALIGN_PARAGRAPH
+from docx.shared import Cm
+from matplotlib.figure import Figure
+from matplotlib.path import Path
+
+from src.exercise import Exercise
+
+
+class Game(Exercise):
+    """A MinMax Game Tree exercise instance."""
+
+    HEIGHT: int = 4
+    """The height of the tree."""
+
+    MIN: int = -1000
+    """The minimum value in the alpha beta cuts."""
+
+    MAX: int = 1000
+    """The maximum value in the alpha beta cuts."""
+
+    FIGSIZE: Tuple[int, int] = (21, 9)
+    """The dimension of the output images."""
+
+    BORDER_COLOR: Dict[str, str] = dict(
+        leaf='#000000',
+        max='#EB220C',
+        min='#00A2FF'
+    )
+    """Defines the color of the node border based on its kind."""
+
+    NODE_COLOR: Dict[str, str] = dict(
+        best='#FFFF00',
+        cut='#FFFFFF',
+        exercise='#FFFFFF',
+        default='#D6D5D5'
+    )
+    """Defines the color of the node based on its kind."""
+
+    @property
+    def name(self) -> str:
+        return 'game'
+
+    @property
+    def yaml(self) -> dict:
+        return f"values: [ {', '.join([str(v) for v in self.values])} ]\n"
+
+    def text(self, doc: Document):
+        p = doc.add_paragraph('Consider the following game tree where the first player is ')
+        p.add_run('MAX').italic = True
+        p.add_run('. Show how the ')
+        p.add_run('min-max').italic = True
+        p.add_run(' algorithm works and show the ')
+        p.add_run('alfa-beta').italic = True
+        p.add_run(' cuts. Also, show which is the proposed move for the first player.')
+        img = BytesIO()
+        self.exercise.savefig(img)
+        doc.add_picture(img, width=Cm(18.5))
+        doc.paragraphs[-1].alignment = WD_ALIGN_PARAGRAPH.CENTER
+        img.close()
+
+    def solution(self, doc: Document):
+        for text, figure in [('a) Min-Max', self.minmax), ('b) Alpha-beta cuts', self.alphabeta)]:
+            doc.add_paragraph(text)
+            img = BytesIO()
+            figure.savefig(img)
+            doc.add_picture(img, width=Cm(18.5))
+            doc.paragraphs[-1].alignment = WD_ALIGN_PARAGRAPH.CENTER
+            img.close()
+
+    def __init__(self, values: Optional[Iterable[int]] = None):
+        """Creates the minmax tree using a nx.DiGraph structure where the leaf nodes have the given values."""
+        if values is None:
+            values = np.random.randint(low=-99, high=100, size=16)
+        else:
+            values = np.array(values)
+            assert len(values) == 16, f"Expected 16 integer values, got {len(values)}"
+        self._tree: nx.DiGraph = nx.balanced_tree(r=2, h=Game.HEIGHT, create_using=nx.DiGraph)
+        for height in range(Game.HEIGHT + 1):
+            for element in range(2 ** height):
+                previous = 2 ** height
+                key = previous + element - 1
+                node = self._tree.nodes[key]
+                node['key'] = key
+                node['layer'] = height
+                node['element'] = element
+                node['pos'] = (2 * element + 1) / (2 * previous), -height
+                if height == Game.HEIGHT:
+                    node['kind'] = 'leaf'
+                    node['edge'] = Game.BORDER_COLOR['leaf']
+                    node['value'] = values[element]
+                    node['parent'] = key // 2
+                else:
+                    node['kind'] = 'max' if height % 2 == 0 else 'min'
+                    node['edge'] = Game.BORDER_COLOR[node['kind']]
+                    node['value'] = None
+                    node['left'] = 2 * key + 1
+                    node['right'] = 2 * key + 2
+                    if height != 0:
+                        node['parent'] = key // 2
+
+    @property
+    def values(self) -> np.ndarray:
+        return np.array([v for v in nx.get_node_attributes(self._tree, name='value').values() if v is not None])
+
+    @property
+    def exercise(self) -> Figure:
+        """Return the figure of the exercise."""
+        tree = self._tree.copy()
+        # for each node, set the appropriate color and assign a blank label for non-leaf ones
+        for node, data in tree.nodes(data=True):
+            node = tree.nodes[node]
+            if data['kind'] == 'leaf':
+                node['color'] = Game.NODE_COLOR['default']
+                node['label'] = node['value']
+            else:
+                node['color'] = Game.NODE_COLOR['exercise']
+                node['label'] = ''
+        return Game._draw(tree)
+
+    @property
+    def minmax(self) -> Figure:
+        """Return the figure of the minmax solution."""
+        tree = self._tree.copy()
+
+        def expand(key: int) -> float:
+            # retrieve the node and assign the default color
+            node = tree.nodes[key]
+            node['color'] = Game.NODE_COLOR['default']
+            # when a leaf is found, simply return its value
+            if node['kind'] == 'leaf':
+                node['label'] = node['value']
+                return node['value']
+            # otherwise, expand the children and assign the value as min/max depending on the node type
+            children = [node['left'], node['right']]
+            values = [expand(key=c) for c in children]
+            best = np.argmax(values) if node['kind'] == 'max' else np.argmin(values)
+            # if we are in the root node, color its best children
+            if node['layer'] == 0:
+                best_choice = tree.nodes[children[best]]
+                best_choice['color'] = Game.NODE_COLOR['best']
+            node['label'] = values[best]
+            return values[best]
+
+        # start the expansion from the root
+        expand(key=0)
+        return Game._draw(tree)
+
+    @property
+    def alphabeta(self) -> Figure:
+        """Return the figure of the alphabeta solution."""
+        tree = self._tree.copy()
+
+        def expand(key: int, alpha: int, beta: int) -> float:
+            # retrieve the node and assign the default color plus a visited flag
+            node = tree.nodes[key]
+            node['visited'] = True
+            node['color'] = Game.NODE_COLOR['default']
+            # when a leaf is found, simply return its value
+            if node['kind'] == 'leaf':
+                node['label'] = node['value']
+                return node['value']
+            # otherwise, first assign alpha and beta, then retrieve the children
+            node['alpha'] = alpha
+            node['beta'] = beta
+            children = [node['left'], node['right']]
+            # distinguish strategy based on whether this is a min or max node
+            if node['kind'] == 'min':
+                node['value'] = Game.MAX
+                for child in children:
+                    value = expand(key=child, alpha=alpha, beta=min(node['beta'], beta))
+                    # use the min function to stick to http://homepage.ufp.pt/jtorres/ensino/ia/alfabeta.html
+                    # which assigns the value of the minmax tree instead of sticking to the alpha and beta
+                    node['value'] = min(node['value'], value)
+                    new_beta = min(node['beta'], node['value'])
+                    if alpha >= new_beta:
+                        return new_beta
+                    # change the value of beta later to stick to http://homepage.ufp.pt/jtorres/ensino/ia/alfabeta.html
+                    # which updates its value only if the search continues
+                    node['beta'] = new_beta
+                # return the value rather than beta to stick to http://homepage.ufp.pt/jtorres/ensino/ia/alfabeta.html
+                # which assigns the value of the minmax tree instead of sticking to the alpha and beta
+                return node['value']
+            else:
+                node['value'] = Game.MIN
+                for child in children:
+                    value = expand(key=child, alpha=max(node['alpha'], alpha), beta=beta)
+                    # use the max function to stick to http://homepage.ufp.pt/jtorres/ensino/ia/alfabeta.html
+                    # which assigns the value of the minmax tree instead of sticking to the alpha and beta
+                    node['value'] = max(node['value'], value)
+                    new_alpha = max(node['alpha'], node['value'])
+                    if new_alpha >= node['beta']:
+                        return new_alpha
+                    # change the value of alpha later to stick to http://homepage.ufp.pt/jtorres/ensino/ia/alfabeta.html
+                    # which updates its value only if the search continues
+                    node['alpha'] = new_alpha
+                # return the value rather than alpha to stick to http://homepage.ufp.pt/jtorres/ensino/ia/alfabeta.html
+                # which assigns the value of the minmax tree instead of sticking to the alpha and beta
+                return node['value']
+
+        expand(key=0, alpha=Game.MIN, beta=Game.MAX)
+        # post-process the tree to assign the correct label and color
+        for n, d in tree.nodes(data=True):
+            n = tree.nodes[n]
+            if 'visited' not in d:
+                n['label'] = ''
+                n['color'] = Game.NODE_COLOR['cut']
+            elif d['kind'] == 'leaf':
+                n['label'] = n['value']
+            else:
+                n['label'] = f"{n['alpha']}/{n['value']}/{n['beta']}"
+        # color the best children
+        root, left, right = tree.nodes[0], tree.nodes[1], tree.nodes[2]
+        left['color'] = Game.NODE_COLOR['best' if left['value'] == root['value'] else 'default']
+        right['color'] = Game.NODE_COLOR['best' if right['value'] == root['value'] else 'default']
+        return Game._draw(tree)
+
+    @staticmethod
+    def _draw_kwargs(leaves: bool) -> Dict[str, Any]:
+        """A dictionary of nx.draw() arguments, depending on whether the drawn nodes are leaves or not."""
+        kwargs = dict(
+            arrows=False,
+            edge_color='black',
+            width=3,
+            linewidths=3,
+            font_family='arial'
+        )
+        if leaves:
+            kwargs['node_shape'] = 's'
+            kwargs['node_size'] = 2800
+            kwargs['font_size'] = 21
+            kwargs['font_weight'] = 'bold'
+        else:
+            w, h = 8, 2
+            kwargs['node_shape'] = Path(np.array([[-w, -h], [-w, h], [w, h], [w, -h], [-w, -h]]))
+            kwargs['node_size'] = 30000
+            kwargs['font_size'] = 23
+            kwargs['font_weight'] = 'normal'
+        return kwargs
+
+    @staticmethod
+    def _draw(tree: nx.DiGraph) -> Figure:
+        """Draws the tree and returns the figure."""
+        # create data structures for leaf nodes, non-leaf nodes, and edges to be plotted separately
+        leafs = {node: data for node, data in tree.nodes(data=True) if data['kind'] == 'leaf'}
+        nodes = {node: data for node, data in tree.nodes(data=True) if data['kind'] != 'leaf'}
+        edges = tree.edges(data=True)
+        fig = plt.figure(figsize=Game.FIGSIZE)
+        # use the same plotting routine for leaf nodes, non leaf nodes, and edges
+        # this is due to the fact that node_shape and node_size accept a single value only
+        # but we need to distinguish between leaf nodes (squared) and non-leaf nodes (rectangular)
+        for nodelist, edgelist, leaves in [(leafs, {}, True), (nodes, {}, False), ({}, edges, False)]:
+            nx.draw(
+                tree,
+                nodelist=list(nodelist),
+                edgelist=list(edgelist),
+                pos=nx.get_node_attributes(tree, name='pos'),
+                labels={node: data['label'] for node, data in nodelist.items()},
+                edgecolors=[data['edge'] for data in nodelist.values()],
+                node_color=[data['color'] for data in nodelist.values()],
+                **Game._draw_kwargs(leaves=leaves)
+            )
+        # if a folder is not passed, plot the output, otherwise store it in the folder
+        fig.gca().set_xlim(0, 1)
+        return fig

@@ -1,0 +1,25 @@
+exam: Artificial Intelligence Exam
+date: 22-07-2025
+exercises:
+  search:
+    source: A
+    destination: G
+    tiebreaker: alphabetical order
+    nodes:
+      A: 5
+      B: 2
+      C: 1
+      D: 5
+      G: 0
+    arcs:
+      - [A, C, 9]
+      - [A, D, 6]
+      - [A, B, 6]
+      - [B, G, 5]
+      - [C, G, 3]
+      - [D, C, 7]
+      - [D, B, 5]
+    graph_ratio: 1.0
+    level_ratio: 7.0
+    label_offset: 0.13
+    heuristic_offset: 0.1

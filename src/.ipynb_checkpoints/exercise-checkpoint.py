@@ -3,6 +3,7 @@ from typing import Dict, Any, Optional
 
 from docx import Document
 
+
 class Exercise:
     """Interface for an exercise in the exam."""
 
